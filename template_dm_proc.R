@@ -2,7 +2,8 @@ top_dir <- system("git rev-parse --show-toplevel", intern = T, ignore.stderr = T
 if(length(top_dir) == 0) top_dir = "."
 setwd(top_dir)
 
-source("/opt/app/home/shared/code_space/ws/jc/helper_fxns.R")
+
+source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/heads/main/helper_fxns.R")
 
 
 # Required directory structure
