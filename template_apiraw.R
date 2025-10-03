@@ -14,14 +14,23 @@ source("~/load_all_tokens.R")
 rt <- "path_to_root"
 # Strings in here will become the folder name for that project
 all_projects <- c("project_name")
-# url <- "https://recover-redcap.partners.org/api/"
-url <- "https://redcap.partners.org/redcap/api/"
+
+
+# api url should end in api/
+
+urlapi <- "https://redcap.partners.org/redcap/api/" # "https://recover-redcap.partners.org/api/"
 
 today_tm <- paste(format(Sys.Date(), "%Y-%m-%d"), format(Sys.time(),"%H_%M"), sep="_")
 today <- format(Sys.Date(), "%Y-%m-%d")
 
 main_api_out<- file.path(top_dir, "../reports/main_api_run")
 dir.create(main_api_out, recursive = T)
+
+
+start_sink <- function(append=T) {
+  sink(glue("{main_api_out}/main_api_run_{today_tm}.log"), split=T, append=append)
+  sink(type = "message", append=append)
+}
 
 start_sink(append=F)
 
@@ -40,12 +49,9 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 
 
 cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
-data_rc_project <- get_rc_formdata(token_rc_project, "rc_project", url = url)
+data_rc_project <- get_rc_formdata(token_rc_project, "rc_project", url = urlapi)
 
 cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
-
-
-Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
-
+closeAllConnections()
 
 

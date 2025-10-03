@@ -10,15 +10,12 @@ source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/h
 # rt is the project folder
 # rt has DM_src, DM, and codespace folders
 
-proj_nm = "project_name"
-enr_form_nm = "..."
+proj_nm = "cong" # proj_nm = "proj_nm"
+enr_form_nm = "enrollment"
 ## Survey queue and form display logic currently need to be downloaded manually and placed in higher level folder. 
 ## Name of files needed for search until API operational
-sq_str <- "lCoho_SurveyQueue_"
-fd_str <- "fdl_export_pid58_"
 
-
-rt <- "path_to_root"
+rt <- "/home/shared/dcc_test/peds_comb" # rt <- "path_to_root"
 
 proj_loc <- file.path(rt, "DM_src", proj_nm)
 
@@ -71,9 +68,8 @@ ds_ua <- get_folder_fxn(dm_src_loc, "_userassigns_", read=T)
 ds_dg <- get_folder_fxn(dm_src_loc, "_dagassigns_", read=T)
 ds_em <- get_folder_fxn(dm_src_loc, "_eventmap_", read=T)
 ds_ei <- get_folder_fxn(dm_src_loc, "_eventidmap_", read=T)
-
-ds_sq <- tryCatch(get_folder_fxn(file.path(proj_loc, "../survey_queues"), sq_str, read=T), error=function(e) data.frame())
-ds_fd <- tryCatch(get_folder_fxn(file.path(proj_loc, "../survey_queues"), fd_str, read=T), error=function(e) data.frame())
+ds_sq <- get_folder_fxn(dm_src_loc, "_surveyqueue_", read=T)
+ds_fd <- get_folder_fxn(dm_src_loc, "_formdisplaylogic_", read=T)
 
 # keys for future joins
 kys <- c("record_id", "redcap_event_name", "redcap_repeat_instrument", "redcap_repeat_instance")
@@ -134,6 +130,29 @@ autodd_queries <- cq_fxn(val_chks, ds = ds_fdata_full, cores_max = 5, me=F)
 rm(ds_fdata_full)
 
 cat(glue("------------------- general queries complete - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
+
+
+cat(glue("------------------- saving qs2 files - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
+
+
+save_info <- lapply(ls(), \(fl_str){
+  if(grepl("^token_", fl_str)) {
+    print(glue("{fl_str} - Do not save out your private token"))
+    return(NA)
+  }
+  print(glue('Saving file {fl_str} to qs2'))
+  obj_save <- eval(parse(text=paste0("`", fl_str, "`")))
+  
+  if(fl_str %in% c("formds_list", "formds_cg_list")) {
+    all_forms <- names(obj_save)
+    lapply(all_forms, function(fm){
+      qs_save(obj_save[[fm]], file.path(dm_loc, paste0(fl_str, "_", fm, "_rdsfxnobjhlpr", ".qs2")))
+    })
+  } else {
+    qs_save(obj_save, file.path(dm_loc, paste0(fl_str, ".qs2")))
+  }
+  print(glue('Complete {fl_str} qs2'))
+})
 
 print("Complete")
 

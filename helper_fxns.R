@@ -26,7 +26,7 @@ pckgs <- c(
   "officer"   , "questionr"  , "data.table"   , "htmltools"  , "vroom"     ,
   "janitor"   , "pagedown"   , "here"         , "readxl"     , "docstring" ,
   "jsonlite"  , "tools"      , "rmarkdown"    , "conflicted" , "stopwords" ,
-  "cowplot"   , "knitr"      , "zip"          , "ftExtra"    , 
+  "cowplot"   , "knitr"      , "zip"          , "ftExtra"    , "xml2"      ,
   "tidyverse" , "crosstable" , "tibble"
 )
 
@@ -1192,12 +1192,12 @@ ord_match_fxn <- function(ds, crits, recycle=T, fixed_n = 1, n_matches, ds_match
 
 
 # Manual: https://github.com/vanderbilt-redcap/data_quality_api
-dq_url <- function(url, pg, pid) glue("{url}?prefix=data_quality_api&page={pg}&pid={pid}&type=module&NOAUTH")
+dq_url <- function(urlapi, pg, pid) glue("{urlapi}?prefix=data_quality_api&page={pg}&pid={pid}&type=module&NOAUTH")
 
 
 
 
-push_query <- function(url, token, pid, evnt_nm, evnt_id,
+push_query <- function(urlapi, token, pid, evnt_nm, evnt_id,
                        instrument, instance, rid, fnm, 
                        res_id, status_id="",
                        comment="", status="OPEN", verbose=F){
@@ -1252,13 +1252,13 @@ push_query <- function(url, token, pid, evnt_nm, evnt_id,
   
   if(verbose) {
     response <- POST(
-      url=url,
+      url=urlapi,
       body=formData,
       verbose()
     )
   } else {
     response <- POST(
-      url=url,
+      url=urlapi,
       body=formData
     )
   }
@@ -1268,7 +1268,7 @@ push_query <- function(url, token, pid, evnt_nm, evnt_id,
 }
 
 
-pull_queries <- function(url, token, verbose=F, records){
+pull_queries <- function(urlapi, token, verbose=F, records){
   
   formData <- list("token"=token,
                    format='json',
@@ -1291,14 +1291,14 @@ pull_queries <- function(url, token, verbose=F, records){
   
   response <- if(verbose){
     POST(
-      url=url,
+      url=urlapi,
       body=formData,
       verbose()
     )
     
   } else {
     POST(
-      url=url,
+      url=urlapi,
       body=formData
     )
   }
@@ -1365,7 +1365,7 @@ dqpush_close <- function(all_dels, tk, ds_dd, ds_qy, evnt, push=T){
 
 
 upload_data_rc <- function(tk, data_to_upload, ov="normal", 
-                           apiurl = "https://recover-redcap.partners.org/api/", 
+                           urlapi = "https://redcap.partners.org/redcap/api/", 
                            steps=500, printi=T,
                            fan = "false") {
   
@@ -1382,7 +1382,7 @@ upload_data_rc <- function(tk, data_to_upload, ov="normal",
       returnContent = "count",
       returnFormat = "json"
     )
-    response <- POST(apiurl, body = formData, encode = "form")
+    response <- POST(urlapi, body = formData, encode = "form")
     result <- content(response)
     return(result)
   } else {
@@ -1407,7 +1407,7 @@ upload_data_rc <- function(tk, data_to_upload, ov="normal",
         returnContent = "count",
         returnFormat = "json"
       )
-      response <- POST(apiurl, body = formData, encode = "form")
+      response <- POST(urlapi, body = formData, encode = "form")
       result_list[[i]] <- content(response)
       if(is.na(as.numeric(result_list[[i]]))) stop(paste("Error in push: ", result_list[[i]]))
     }
@@ -1426,7 +1426,7 @@ upload_data_rc <- function(tk, data_to_upload, ov="normal",
 
 
 retrieve_rc_data <- function(tk, addit_vrb = as.character(), form = NA, recs, 
-                             urlapi = "https://recover-redcap.partners.org/api/", 
+                             urlapi = "https://redcap.partners.org/redcap/api/", 
                              return_fd = F) {
   form_data <- list(
     "token" = tk,
@@ -1470,21 +1470,17 @@ retrieve_rc_data <- function(tk, addit_vrb = as.character(), form = NA, recs,
 
 ### API raw data load functions
 
-get_res <- function(url, body, encode, response, try_count=3){
+get_res <- function(urlapi, body, encode, response, try_count=3){
   if(!missing(response)) {
     if(response$status_code == 200) return(response)
     print("waiting...")
     Sys.sleep(5)
   }
   if(try_count == 0) stop(glue("API Failed while downloading dataset including participant \n{body[[length(body)]]}"))
-  response <- httr::POST(url, body=body, encode = encode)
-  get_res(url, body, encode, response, try_count - 1)
+  response <- httr::POST(urlapi, body=body, encode = encode)
+  get_res(urlapi, body, encode, response, try_count - 1)
 }
 
-start_sink <- function(append=T) {
-  sink(file.path(main_api_out, "main_api_run.log"), split=T, append=append)
-  sink(type = "message", append=append)
-}
 
 get_loc <- function(loc){
   today_dt <- format(Sys.Date(), "%Y%m%d")
@@ -1499,7 +1495,7 @@ get_loc <- function(loc){
   list(loc_base=loc_base, loc_last=loc_last)
 }
 
-get_byid <- function(all_ids, url, formData, n_batch=20, content_fxn = content_chr, encode="form", verbose=T){
+get_byid <- function(all_ids, urlapi, formData, n_batch=20, content_fxn = content_chr, encode="form", verbose=T){
   
   all_ids_seq <- seq(0, length(all_ids), by=n_batch)
   if(length(all_ids) > all_ids_seq[length(all_ids_seq)]) all_ids_seq = c(all_ids_seq,  length(all_ids))
@@ -1519,7 +1515,7 @@ get_byid <- function(all_ids, url, formData, n_batch=20, content_fxn = content_c
     try_count = 3
     named_id_list <- setNames(as.list(x), glue('records[{0:(length(x) - 1)}]'))
     formData_ids <- c(formData, named_id_list)
-    response <- get_res(url, body = formData_ids, encode = encode)
+    response <- get_res(urlapi, body = formData_ids, encode = encode)
     
     content_fxn(response)
   })
@@ -1527,32 +1523,32 @@ get_byid <- function(all_ids, url, formData, n_batch=20, content_fxn = content_c
   return(result_list)
 }
 
-get_rc_params <- function(tk, url = "https://recover-redcap.partners.org/api/"){
+get_rc_params <- function(tk, urlapi = "https://redcap.partners.org/redcap/api/"){
   
   pi_formData <- list("token"=tk,
                       content='project',
                       format='csv',
                       returnFormat='csv')
   
-  pi_response <- httr::POST(url, body = pi_formData, encode = "form")
+  pi_response <- httr::POST(urlapi, body = pi_formData, encode = "form")
   
   pi_res <- httr::content(pi_response)
   
   rv_formData <- list("token"=tk,
                       content='version')
   
-  rv_response <- httr::POST(url, body = rv_formData, encode = "form")
+  rv_response <- httr::POST(urlapi, body = rv_formData, encode = "form")
   rv_res <- httr::content(rv_response)
   
   rc_version <- paste0("redcap_v", names(rv_res))
   pid <- pi_res$project_id
   list(rc_version=rc_version, 
        pid=pid,
-       url=gsub("api.+", "", url),
-       urlapi = url)
+       url=gsub("api.+", "", urlapi),
+       urlapi = urlapi)
 }
 
-get_rc_formdata <- function(tk, loc_head, url, ret=F){
+get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   ## REDCap survey queue download should be added when available
   
@@ -1564,7 +1560,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
                       rawOrLabelHeaders = 'raw',
                       returnFormat = 'csv'
   )
-  response_dd <- httr::POST(url, body = formData_dd, encode = "form")
+  response_dd <- httr::POST(urlapi, body = formData_dd, encode = "form")
   meta_list$result_dd <- content_chr(response_dd) 
   
   
@@ -1584,7 +1580,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
   kys <- c("record_id", "redcap_event_name", "redcap_repeat_instrument", "redcap_repeat_instance")
   
   
-  meta_list$proj <- get_rc_params(tk, url)
+  meta_list$proj <- get_rc_params(tk, urlapi)
   
   pid <- meta_list$proj$pid
   
@@ -1598,7 +1594,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
   
   cat(glue("------------------- Downloading all forms - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   form_list <- nlapply(dt_list_full, \(x) {
-    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=url)
+    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi)
     form_ds <- form_ds_raw %>% 
       mutate(cnt_nan = rowSums(!is.na(pick(-all_of(kys))))) %>% 
       filter(cnt_nan > 0) %>% 
@@ -1619,7 +1615,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
                             content='formEventMapping',
                             format='csv',
                             returnFormat='csv')
-  api_eventmap <- httr::POST(url, body = formData_eventmap, encode = "form")
+  api_eventmap <- httr::POST(urlapi, body = formData_eventmap, encode = "form")
   meta_list$res_eventmap <- content_chr(api_eventmap)
   write.csv(meta_list$res_eventmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventmap_{today_tm}.csv"), row.names=F)
   
@@ -1628,7 +1624,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
                               content='event',
                               format='csv',
                               returnFormat='csv')
-  api_eventidmap <- httr::POST(url, body = formData_eventidmap, encode = "form")
+  api_eventidmap <- httr::POST(urlapi, body = formData_eventidmap, encode = "form")
   meta_list$res_eventidmap <- content_chr(api_eventidmap)
   write.csv(meta_list$res_eventidmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventidmap_{today_tm}.csv"), row.names=F)
   
@@ -1637,7 +1633,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
   
   cat(glue("------------------- downloading queries - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   
-  pull_url <- dq_url(url, "export", pid)
+  pull_url <- dq_url(urlapi, "export", pid)
   
   fd_queries <- list("token"=tk,
                      format='json',
@@ -1678,7 +1674,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
                         content='userDagMapping',
                         format='csv',
                         returnFormat='csv')
-  api_dags <- httr::POST(url, body = formData_dags, encode = "form")
+  api_dags <- httr::POST(urlapi, body = formData_dags, encode = "form")
   meta_list$res_dags <- content_chr(api_dags)
   write.csv(meta_list$res_dags, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_dagassigns_{today_tm}.csv"), row.names=F)
   
@@ -1687,7 +1683,7 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
                          content='user',
                          format='csv',
                          returnFormat='csv')
-  api_users <- httr::POST(url, body = formData_users, encode = "form")
+  api_users <- httr::POST(urlapi, body = formData_users, encode = "form")
   meta_list$res_users <- content_chr(api_users)
   write.csv(meta_list$res_users, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_userassigns_{today_tm}.csv"), row.names=F)
   
@@ -1697,9 +1693,34 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
                                content='repeatingFormsEvents',
                                format='csv',
                                returnFormat='csv')
-  api_repeatforms <- httr::POST(url, body = formData_repeatforms, encode = "form")
+  api_repeatforms <- httr::POST(urlapi, body = formData_repeatforms, encode = "form")
   meta_list$res_repeatforms <- content_chr(api_repeatforms)
   write.csv(meta_list$res_repeatforms, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_repeatforms_{today_tm}.csv"), row.names=F)
+  
+  formData_xml <- list("token"=tk,
+                      content='project_xml',
+                      returnMetadataOnly='true',
+                      format = "xml",
+                      returnFormat = "xml")
+  
+  response_xml <- httr::POST(urlapi, body = formData_xml, encode="form")
+  result_xml <- content(response_xml)
+  
+  xml_as_list <- xml2::as_list(result_xml)
+  
+  meta_list$survey_queue <- lapply(xml_as_list$ODM$Study$GlobalVariables$SurveysQueueGroup, \(x) {
+    as_tibble(attributes(x))
+  }) %>% bind_rows()
+  
+  meta_list$fd_logic <- lapply(xml_as_list$ODM$Study$GlobalVariables$FormDisplayLogicConditionsGroup, \(x) {
+    as_tibble(attributes(x))
+  }) %>% 
+    bind_rows() %>% 
+    separate_longer_delim(forms_events, ",") %>% 
+    separate_wider_delim(forms_events, ":", names=c("event_name", "form_name"))
+  
+  write.csv(meta_list$survey_queue, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_surveyqueue_{today_tm}.csv"), row.names=F)
+  write.csv(meta_list$fd_logic, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_formdisplaylogic_{today_tm}.csv"), row.names=F)
   
   print(glue("Files saved to {loc_list[[loc_head]]$loc_base}"))
   
@@ -1711,21 +1732,21 @@ get_rc_formdata <- function(tk, loc_head, url, ret=F){
 
 
 gen_link <- function(rc_version, pid, redcap_repeat_instance=1, event_id, record_id, form, variable='', tk,
-                     url = "https://recover-redcap.partners.org", linklbl = "REDCap Link") {
+                     urlrc = "https://redcap.partners.org/redcap", linklbl = "REDCap Link") {
   
   if(missing(rc_version) | missing(pid)){
     if(missing(tk)) stop("Function needs either version and pid, or a token")
-    param_list <- get_rc_params(tk, url = paste0(url, "/api/"))
+    param_list <- get_rc_params(tk, urlapi = paste0(urlrc, "/api/"))
     rc_version = param_list$rc_version
     pid= param_list$pid
   }
   if(missing(event_id)){
-    url_out <- glue("{url}/{rc_version}/DataEntry/record_home.php?pid={pid}&arm=1&id={record_id}")
+    url_out <- glue("{urlrc}/{rc_version}/DataEntry/record_home.php?pid={pid}&arm=1&id={record_id}")
     urlhtml_out <- glue("<a href='{url_out}' target='_blank'>{linklbl}</a>")
     return(list(link=url_out, url=urlhtml_out))
   }
   
-  url_out <- glue("{url}/{rc_version}/DataEntry/index.php?pid={pid}&instance={redcap_repeat_instance}&event_id={event_id}&id={record_id}&page={form}&fldfocus={variable}#{variable}-tr")
+  url_out <- glue("{urlrc}/{rc_version}/DataEntry/index.php?pid={pid}&instance={redcap_repeat_instance}&event_id={event_id}&id={record_id}&page={form}&fldfocus={variable}#{variable}-tr")
   urlhtml_out <- glue("<a href='{url_out}' target='_blank'>{linklbl}</a>")
   list(link=url_out, url=urlhtml_out)
 }
