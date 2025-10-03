@@ -35,7 +35,7 @@ if(bargs_in$add_log %in% 1){
 ### Load data -----
 cat(glue("------------------- Loading Data - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
-cong_env_list <- get_env_list("cong")
+cong_env_list <- get_env_list("/home/shared/dcc_test/peds_comb/cong")
 
 ds_dd <- cong_env_list$ds_dd()
 formds_list <- cong_env_list$formds_list()

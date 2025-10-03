@@ -17,7 +17,7 @@ enr_form_nm = "enrollment"
 
 rt <- "/home/shared/dcc_test/peds_comb" # rt <- "path_to_root"
 
-proj_loc <- file.path(rt, "DM_src", proj_nm)
+proj_loc <- file.path(rt, proj_nm, "DM_src")
 
 bargs_mkrenv <- getArgs(defaults = list(dt = NA, pf=NA, log=0))
 
@@ -44,7 +44,7 @@ if(is.na(bargs_mkrenv$pf)) {
 }
 
 
-dm_loc <- file.path(rt, "DM", proj_nm, paste0(rt_date, dir_pf))
+dm_loc <- file.path(rt, proj_nm, "DM", paste0(rt_date, dir_pf))
 dir.create(dm_loc, recursive = "T")
 dm_src_loc <- file.path(proj_loc, rt_date)
 

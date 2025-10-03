@@ -11,14 +11,14 @@ source("~/load_all_tokens.R")
 # rt is the project folder
 # rt has DM_src, DM, and codespace folders
 
-rt <- "path_to_root"
+rt <- "/home/shared/dcc_test/peds_comb" # "path_to_root" # 
 # Strings in here will become the folder name for that project
-all_projects <- c("project_name")
+all_projects <- c("cong")
 
 
 # api url should end in api/
 
-urlapi <- "https://redcap.partners.org/redcap/api/" # "https://recover-redcap.partners.org/api/"
+urlapi <- "https://recover-redcap.partners.org/api/" # "https://redcap.partners.org/redcap/api/" # 
 
 today_tm <- paste(format(Sys.Date(), "%Y-%m-%d"), format(Sys.time(),"%H_%M"), sep="_")
 today <- format(Sys.Date(), "%Y-%m-%d")
@@ -37,7 +37,7 @@ start_sink(append=F)
 loc_list <- list()
 
 for(proj in all_projects){ 
-  loc_list[[proj]] <- get_loc(proj)
+  loc_list[[proj]] <- get_loc(rt, proj)
 }
 
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
@@ -49,7 +49,7 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 
 
 cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
-data_rc_project <- get_rc_formdata(token_rc_project, "rc_project", url = urlapi)
+data_rc_project <- get_rc_formdata(token_cong, "cong", url = urlapi)
 
 cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
 closeAllConnections()

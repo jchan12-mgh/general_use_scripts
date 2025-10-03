@@ -120,14 +120,12 @@ qs_read1 <- function(ds, ...){
 
 ## loads saved processed files references into a named list of functions that will load data when called
 
-get_env_list <- function(study, dt, dm_src="/opt/app2/home/shared/code_space/DM"){
+get_env_list <- function(proj_loc, dt){
+  proj_dm_loc <- file.path(proj_loc, "DM")
   
-  if(missing(study)) stop("You must provide a cohort name")
-  
-  dm_rc_pulls_dir <- list.files(dm_src, pattern=paste0("^src_", study, "$"), full.names = T)
-  if(missing(dt)) dt <- suppressWarnings(max(as.numeric(list.files(dm_rc_pulls_dir)), na.rm=T))
+  if(missing(dt)) dt <- suppressWarnings(max(as.numeric(list.files(proj_dm_loc)), na.rm=T))
   print(glue("loading data from {dt}"))
-  env_loc <- file.path(dm_rc_pulls_dir, dt)
+  env_loc <- file.path(proj_dm_loc, dt)
   
   all_rds <- list.files(env_loc, pattern="\\.rds$|\\.qs2")
   
@@ -1482,16 +1480,16 @@ get_res <- function(urlapi, body, encode, response, try_count=3){
 }
 
 
-get_loc <- function(loc){
+get_loc <- function(rt, loc){
   today_dt <- format(Sys.Date(), "%Y%m%d")
-  loc_base <- file.path(rt, "DM_src", loc, today_dt)
+  loc_base <- file.path(rt, loc, "DM_src", today_dt)
   dir.create(loc_base, recursive = T)
   dir.create(glue("{loc_base}/all_forms"))
   dir.create(glue("{loc_base}/all_rfiles"))
-  dm_rt_dates_chr <- na.omit(suppressWarnings(as.numeric(list.files(file.path(rt, "DM_src", loc)))))
+  dm_rt_dates_chr <- na.omit(suppressWarnings(as.numeric(list.files(file.path(rt, loc, "DM_src")))))
   dm_rt_dates <- dm_rt_dates_chr[order(dm_rt_dates_chr, decreasing = T)]
   dm_rt_date <- setdiff(dm_rt_dates, format(Sys.Date(), "%Y%m%d"))[1]
-  loc_last <- file.path(rt, "DM_src", loc, dm_rt_date)
+  loc_last <- file.path(rt, loc, "DM_src", dm_rt_date)
   list(loc_base=loc_base, loc_last=loc_last)
 }
 
