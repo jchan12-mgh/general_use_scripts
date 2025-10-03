@@ -11,10 +11,11 @@ source("~/load_all_tokens.R")
 # rt is the project folder
 # rt has DM_src, DM, and codespace folders
 
-rt <- "/opt/app/home/shared/dcc_test/peds_comb"
+rt <- "path_to_root"
 # Strings in here will become the folder name for that project
-all_projects <- c("cg", "cong")
-url <- "https://recover-redcap.partners.org/api/"
+all_projects <- c("project_name")
+# url <- "https://recover-redcap.partners.org/api/"
+url <- "https://redcap.partners.org/redcap/api/"
 
 today_tm <- paste(format(Sys.Date(), "%Y-%m-%d"), format(Sys.time(),"%H_%M"), sep="_")
 today <- format(Sys.Date(), "%Y-%m-%d")
@@ -38,14 +39,13 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 # api call should read in a single form and write out that single form
 
 
-cat(glue("------------------- starting CG - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
-data_peds <- get_rc_formdata(token_cg, "cg")
-
-cat(glue("------------------- starting cong - {format(Sys.time(), '%H:%M')} -------------- \n\n"))
-data_cong <- get_rc_formdata(token_cong, 'cong', ret=T)
-
-
+cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
+data_rc_project <- get_rc_formdata(token_rc_project, "rc_project", url = url)
 
 cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
+
+
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
+
 
 

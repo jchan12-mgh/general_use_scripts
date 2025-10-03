@@ -10,15 +10,15 @@ source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/h
 # rt is the project folder
 # rt has DM_src, DM, and codespace folders
 
-proj_nm = "cong"
-enr_form_nm = "enrollment"
+proj_nm = "project_name"
+enr_form_nm = "..."
 ## Survey queue and form display logic currently need to be downloaded manually and placed in higher level folder. 
 ## Name of files needed for search until API operational
 sq_str <- "lCoho_SurveyQueue_"
 fd_str <- "fdl_export_pid58_"
 
 
-rt <- "/opt/app/home/shared/dcc_test/peds_comb/"
+rt <- "path_to_root"
 
 proj_loc <- file.path(rt, "DM_src", proj_nm)
 
@@ -26,7 +26,7 @@ bargs_mkrenv <- getArgs(defaults = list(dt = NA, pf=NA, log=0))
 
 today <- format(Sys.Date(), "%Y%m%d")
 
-cat(glue("------------------- ped_mkrenv.R log file - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
+cat(glue("------------------- project_name.R log file - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
 # This should work if you have the repository in the folder with your initials in the ws directory
 
@@ -52,7 +52,7 @@ dir.create(dm_loc, recursive = "T")
 dm_src_loc <- file.path(proj_loc, rt_date)
 
 if(bargs_mkrenv$log == 1) {
-  log_loc <- file.path(dm_loc, "ped_mkrenv.log")
+  log_loc <- file.path(dm_loc, "project_name.log")
   cat(glue("-------- for run info check log file at {log_loc} ----- \n\n"))
   sf <- file(log_loc, open = "wt")
   sink(sf, split = T)
@@ -66,12 +66,12 @@ writeLines(glue("Source Data Date = {rt_date}"), file.path(dm_loc, glue("src_dt_
 cat(glue("------------------- working with data from {rt} ------------------- \n\n"))
 
 ds_dd <- get_folder_fxn(dm_src_loc, "_DataDictionary_", read=T)
-ds_qy <- get_folder_fxn(dm_src_loc, "_allqueries_", read=T)
+
 ds_ua <- get_folder_fxn(dm_src_loc, "_userassigns_", read=T)
 ds_dg <- get_folder_fxn(dm_src_loc, "_dagassigns_", read=T)
 ds_em <- get_folder_fxn(dm_src_loc, "_eventmap_", read=T)
 ds_ei <- get_folder_fxn(dm_src_loc, "_eventidmap_", read=T)
-ds_rt <- get_folder_fxn(dm_src_loc, "_repeatforms_", read=T)
+
 ds_sq <- tryCatch(get_folder_fxn(file.path(proj_loc, "../survey_queues"), sq_str, read=T), error=function(e) data.frame())
 ds_fd <- tryCatch(get_folder_fxn(file.path(proj_loc, "../survey_queues"), fd_str, read=T), error=function(e) data.frame())
 
@@ -89,10 +89,8 @@ rm(fdata_list)
 
 cat(glue("------------------- joining files - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 ds_fdata <- Reduce(function(x, y) {
-    collapse::join(x %>% select(-any_of('form')), y %>% select(-any_of('form')), how="full", on = kys, overid=2)
+  collapse::join(x %>% select(-any_of('form')), y %>% select(-any_of('form')), how="full", on = kys, overid=2)
 }, formds_list)
-
-qs_save(ds_fdata, file.path(dm_loc, "ds_fdata_origya.qs2"))
 
 ds_sq_r <- bind_rows(ds_sq %>% 
                        mutate(FD=0), 
@@ -105,7 +103,7 @@ afmts_list <- fmt_gen_fxn(ds_dd)
 
 repeat_instruments <- repeat_instr_fxn(ds_fdata)
 
-dd_list <- ddprep_fxn(ds_dd, repeat_instruments, cohort_nm = proj_nm, sq_r=ds_sq_r)
+dd_list <- ddprep_fxn(ds_dd, repeat_instruments, cohort_nm = proj_nm)
 
 query_optional_vrs <- c()
 

@@ -123,7 +123,7 @@ qs_read1 <- function(ds, ...){
 get_env_list <- function(study, dt, dm_src="/opt/app2/home/shared/code_space/DM"){
   
   if(missing(study)) stop("You must provide a cohort name")
-
+  
   dm_rc_pulls_dir <- list.files(dm_src, pattern=paste0("^src_", study, "$"), full.names = T)
   if(missing(dt)) dt <- suppressWarnings(max(as.numeric(list.files(dm_rc_pulls_dir)), na.rm=T))
   print(glue("loading data from {dt}"))
@@ -414,7 +414,7 @@ datediff <- function(dt1, dt2, units = "d", ...){
 #' convert the REDCap branching_logic into an R-friendly string
 #' String searches generated as new scenarios rose up. Will need more steps with expanded use
 convert_branching_logic <- function(br) {
-    baseline_biosex_vrs <- c("[baseline_arm_.][biosex]",
+  baseline_biosex_vrs <- c("[baseline_arm_.][biosex]",
                            "[first-event-name][biosex]", 
                            "[first-event-name][demo_cgbiosex]")
   baseline_biosex_txt <- paste(gsub("\\]", "\\\\]", gsub("\\[", "\\\\[", baseline_biosex_vrs)), collapse = "|")
@@ -667,7 +667,7 @@ clogic_conv <- function(x){
 
 
 get_sqrlogic <- function(ds){
-
+  
   ds %>%
     mutate(clogic = clogic_conv(condition_logic),
            vistype = ifelse(grepl("baseline", event_name, ignore.case = T), "B", "F")) %>%
@@ -684,7 +684,7 @@ get_sqrlogic <- function(ds){
 
 
 form_read_fxn <- function(str, flnms, rt_str, ds_dd_coh) {
-
+  
   fl_loc <- get_fl_fxn(flnms, paste0("_DATA_", str, "_"))
   
   if(grepl("qs2$", fl_loc)){
@@ -1552,8 +1552,8 @@ get_rc_params <- function(tk, url = "https://recover-redcap.partners.org/api/"){
        urlapi = url)
 }
 
-get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
-
+get_rc_formdata <- function(tk, loc_head, url, ret=F){
+  
   ## REDCap survey queue download should be added when available
   
   meta_list <- list()
@@ -1583,8 +1583,8 @@ get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
   
   kys <- c("record_id", "redcap_event_name", "redcap_repeat_instrument", "redcap_repeat_instance")
   
-
-  meta_list$proj <- get_rc_params(tk)
+  
+  meta_list$proj <- get_rc_params(tk, url)
   
   pid <- meta_list$proj$pid
   
@@ -1596,11 +1596,9 @@ get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
   
   cat(glue("------------------- data dictionary out - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   
-  dt_list <- setdiff(dt_list_full, enrl_form)
-  
   cat(glue("------------------- Downloading all forms - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   form_list <- nlapply(dt_list_full, \(x) {
-    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x)
+    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=url)
     form_ds <- form_ds_raw %>% 
       mutate(cnt_nan = rowSums(!is.na(pick(-all_of(kys))))) %>% 
       filter(cnt_nan > 0) %>% 
@@ -1624,7 +1622,7 @@ get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
   api_eventmap <- httr::POST(url, body = formData_eventmap, encode = "form")
   meta_list$res_eventmap <- content_chr(api_eventmap)
   write.csv(meta_list$res_eventmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventmap_{today_tm}.csv"), row.names=F)
-
+  
   
   formData_eventidmap <- list("token"=tk,
                               content='event',
@@ -1638,7 +1636,7 @@ get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
   
   
   cat(glue("------------------- downloading queries - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
- 
+  
   pull_url <- dq_url(url, "export", pid)
   
   fd_queries <- list("token"=tk,
@@ -1649,30 +1647,31 @@ get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
   res_queries <- get_res(pull_url, body = fd_queries, encode = "form")
   
   res_queries_raw <- content_chr(res_queries)
-  # res_queries_list <- get_byid(all_ids, pull_url, fd_queries, n_batch = 500000, content_fxn = httr::content)
-  res_queries_chr <- rawToChar(unlist(res_queries_raw))
-  res_queries_json <- fromJSON(res_queries_chr)
   
-  
-  
-  cq_ds <- bind_rows(lapply(res_queries_json, function(x){
-    # print(x$record)
-    res_ds <- bind_rows(lapply(x$resolutions, function(xx) {
-      ds <- as.data.frame(t(unlist(xx)))
-      names(ds) <- gsub("^[1-9]+.", "", names(ds))
-      ds
+  if(F){
+    res_queries_chr <- rawToChar(unlist(res_queries_raw))
+    res_queries_json <- fromJSON(res_queries_chr)
+    
+    cq_ds <- bind_rows(lapply(res_queries_json, function(x){
+      # print(x$record)
+      res_ds <- bind_rows(lapply(x$resolutions, function(xx) {
+        ds <- as.data.frame(t(unlist(xx)))
+        names(ds) <- gsub("^[1-9]+.", "", names(ds))
+        ds
+      }))
+      res_loc <- as.data.frame(t(unlist(x[!names(x) == "resolutions"])))
+      if(nrow(res_ds) == 0) return(res_loc)
+      cbind(res_loc,
+            res_ds %>% select(-any_of("status_id")))
     }))
-    res_loc <- as.data.frame(t(unlist(x[!names(x) == "resolutions"])))
-    if(nrow(res_ds) == 0) return(res_loc)
-    cbind(res_loc,
-          res_ds %>% select(-any_of("status_id")))
-  }))
+    
+    cq_ds %>% 
+      left_join(meta_list$res_eventidmap %>% 
+                  select(event_id, redcap_event_name = unique_event_name),
+                by = join_by(event_id)) %>% 
+      write.csv(glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_allqueries_{today_tm}.csv"), row.names=F)
+  }
   
-  cq_ds %>% 
-    left_join(meta_list$res_eventidmap %>% 
-                select(event_id, redcap_event_name = unique_event_name),
-              by = join_by(event_id)) %>% 
-  write.csv(glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_allqueries_{today_tm}.csv"), row.names=F)
   
   cat(glue("------------------- downloading dag information - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   formData_dags <- list("token"=tk,
@@ -1685,9 +1684,9 @@ get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
   
   cat(glue("------------------- downloading user information - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   formData_users <- list("token"=tk,
-                        content='user',
-                        format='csv',
-                        returnFormat='csv')
+                         content='user',
+                         format='csv',
+                         returnFormat='csv')
   api_users <- httr::POST(url, body = formData_users, encode = "form")
   meta_list$res_users <- content_chr(api_users)
   write.csv(meta_list$res_users, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_userassigns_{today_tm}.csv"), row.names=F)
@@ -1703,7 +1702,7 @@ get_rc_formdata <- function(tk, loc_head, enrl_form="enrollment", ret=F){
   write.csv(meta_list$res_repeatforms, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_repeatforms_{today_tm}.csv"), row.names=F)
   
   print(glue("Files saved to {loc_list[[loc_head]]$loc_base}"))
- 
+  
   if(ret) list(form_list = form_list, cq_ds=cq_ds, meta_list=meta_list)
 }
 
@@ -1854,7 +1853,7 @@ val_cfxn <- function(ddv) {
 
 
 cq_fxn <- function(exp_ds, ds = ds_fdata, cores_max = 5, me=T) {
-
+  
   kys <- c("record_id", "redcap_event_name", "redcap_repeat_instrument",  "redcap_repeat_instance")
   # get data frame with all val_txt for each variable
   all_dd_chks <- exp_ds
@@ -1989,6 +1988,5 @@ options(warn=1)
 
 # this helps with dealing with some shell runs of scripts. This will break if we ever switch away from the current rstudio server
 Sys.setenv(RSTUDIO_PANDOC="/usr/lib/rstudio-server/bin/quarto/bin/tools/x86_64")
-
 
 
