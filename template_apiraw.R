@@ -11,10 +11,14 @@ source("~/load_all_tokens.R")
 # rt is the project folder
 # rt has DM_src, DM, and codespace folders
 
-rt <- "/opt/app/home/shared/dcc_test/peds_comb"
+rt <- "/home/shared/dcc_test/peds_comb" # "path_to_root" # 
 # Strings in here will become the folder name for that project
-all_projects <- c("cg", "cong")
-url <- "https://recover-redcap.partners.org/api/"
+all_projects <- c("cong")
+
+
+# api url should end in api/
+
+urlapi <- "https://recover-redcap.partners.org/api/" # "https://redcap.partners.org/redcap/api/" # 
 
 today_tm <- paste(format(Sys.Date(), "%Y-%m-%d"), format(Sys.time(),"%H_%M"), sep="_")
 today <- format(Sys.Date(), "%Y-%m-%d")
@@ -22,12 +26,18 @@ today <- format(Sys.Date(), "%Y-%m-%d")
 main_api_out<- file.path(top_dir, "../reports/main_api_run")
 dir.create(main_api_out, recursive = T)
 
+
+start_sink <- function(append=T) {
+  sink(glue("{main_api_out}/main_api_run_{today_tm}.log"), split=T, append=append)
+  sink(type = "message", append=append)
+}
+
 start_sink(append=F)
 
 loc_list <- list()
 
 for(proj in all_projects){ 
-  loc_list[[proj]] <- get_loc(proj)
+  loc_list[[proj]] <- get_loc(rt, proj)
 }
 
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
@@ -38,14 +48,10 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 # api call should read in a single form and write out that single form
 
 
-cat(glue("------------------- starting CG - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
-data_peds <- get_rc_formdata(token_cg, "cg")
-
-cat(glue("------------------- starting cong - {format(Sys.time(), '%H:%M')} -------------- \n\n"))
-data_cong <- get_rc_formdata(token_cong, 'cong', ret=T)
-
-
+cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
+data_rc_project <- get_rc_formdata(token_cong, "cong", url = urlapi)
 
 cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
+closeAllConnections()
 
 
