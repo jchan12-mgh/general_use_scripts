@@ -7,17 +7,16 @@ source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/h
 
 
 # Required directory structure
-# rt is the project folder
-# rt has DM_src, DM, and codespace folders
+# project_name is the project folder
 
-proj_nm = "cong" # proj_nm = "proj_nm"
-enr_form_nm = "enrollment"
+redcap_name = "precise" # redcap_name = "redcap_name"
+enr_form_nm = "consent"
 ## Survey queue and form display logic currently need to be downloaded manually and placed in higher level folder. 
 ## Name of files needed for search until API operational
 
-rt <- "/home/shared/dcc_test/peds_comb" # rt <- "path_to_root"
+project_location <- "C:/Users/wbonaventura/Desktop/PRECISE" # project_location <- "path_to_root"
 
-proj_loc <- file.path(rt, proj_nm, "DM_src")
+dm_src_loc <- file.path(project_location, redcap_name, "DM_src")
 
 bargs_mkrenv <- getArgs(defaults = list(dt = NA, pf=NA, log=0))
 
@@ -27,15 +26,15 @@ cat(glue("------------------- project_name.R log file - {format(Sys.time(), '%H:
 
 # This should work if you have the repository in the folder with your initials in the ws directory
 
-max_fl_dt <- function(dir) max(as.numeric(list.files(proj_loc)), na.rm=T)
+max_fl_dt <- function(dir) max(as.numeric(list.files(dm_src_loc)), na.rm=T)
 
 if(is.na(bargs_mkrenv$dt)){
-  rt_date <- max_fl_dt(rc_sites_dir)
+  project_location_date <- max_fl_dt(rc_sites_dir)
 } else {
-  rt_date <- bargs_mkrenv$dt
+  project_location_date <- bargs_mkrenv$dt
 }
 
-rt_date_dt <- ymd(rt_date)
+project_location_date_dt <- ymd(project_location_date)
 
 if(is.na(bargs_mkrenv$pf)) {
   dir_pf = ""
@@ -44,9 +43,9 @@ if(is.na(bargs_mkrenv$pf)) {
 }
 
 
-dm_loc <- file.path(rt, proj_nm, "DM", paste0(rt_date, dir_pf))
+dm_loc <- file.path(project_location, redcap_name, "DM", paste0(project_location_date, dir_pf))
 dir.create(dm_loc, recursive = "T")
-dm_src_loc <- file.path(proj_loc, rt_date)
+dm_src_loc <- file.path(dm_src_loc, project_location_date)
 
 if(bargs_mkrenv$log == 1) {
   log_loc <- file.path(dm_loc, "project_name.log")
@@ -57,10 +56,10 @@ if(bargs_mkrenv$log == 1) {
 }
 
 
-writeLines(glue("Source Data Date = {rt_date}"), file.path(dm_loc, glue("src_dt_{rt_date}")))
+writeLines(glue("Source Data Date = {project_location_date}"), file.path(dm_loc, glue("src_dt_{project_location_date}")))
 
 
-cat(glue("------------------- working with data from {rt} ------------------- \n\n"))
+cat(glue("------------------- working with data from {project_location} ------------------- \n\n"))
 
 ds_dd <- get_folder_fxn(dm_src_loc, "_DataDictionary_", read=T)
 
@@ -99,13 +98,13 @@ afmts_list <- fmt_gen_fxn(ds_dd)
 
 repeat_instruments <- repeat_instr_fxn(ds_fdata)
 
-dd_list <- ddprep_fxn(ds_dd, repeat_instruments, cohort_nm = proj_nm)
+dd_list <- ddprep_fxn(ds_dd, repeat_instruments, cohort_nm = redcap_name)
 
 query_optional_vrs <- c()
 
 cat(glue("------------------- running expect_complete - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
-# ddprep work introduces shortcuts for REDCap logic that need to be accounted for in ds_fdata_full
+# ddprep work introduces shoproject_locationcuts for REDCap logic that need to be accounted for in ds_fdata_full
 #' enrollment form has all variables joined on with enr_vis_ prefix
 #' full listing of these can be seen in the dd_prep function. Required additions can be seen in the failed logic from form_completeness generation
 
@@ -123,7 +122,7 @@ form_completeness <- dd_list$dd_val %>%
   expect_complete_cfxn(ds = ds_fdata_full, cores_max = 5) %>%
   filter(variable %!in% query_optional_vrs) 
 
-val_chks <- val_cfxn(dd_list$dd_val)
+val_chks <- val_cfxn(dd_list$dd_val, project_location_date_dt)
 
 autodd_queries <- cq_fxn(val_chks, ds = ds_fdata_full, cores_max = 5, me=F)
 

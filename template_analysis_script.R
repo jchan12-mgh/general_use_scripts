@@ -35,10 +35,10 @@ if(bargs_in$add_log %in% 1){
 ### Load data -----
 cat(glue("------------------- Loading Data - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
-cong_env_list <- get_env_list("/home/shared/dcc_test/peds_comb/cong")
+precise_env_list <- get_env_list("C:/Users/wbonaventura/Desktop/PRECISE/precise")
 
-ds_dd <- cong_env_list$ds_dd()
-formds_list <- cong_env_list$formds_list()
+ds_dd <- precise_env_list$ds_dd()
+formds_list <- precise_env_list$formds_list()
 
 
 

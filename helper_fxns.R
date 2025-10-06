@@ -594,17 +594,23 @@ ddprep_fxn <- function(dd, repeat_instr, cohort_nm, in_em = ds_em, sq_r=data.fra
   ### pick up embedded vars from field_label and their branching logic
   embedded_vars <- dd %>% filter(field_type == "descriptive" & str_detect(field_label, "\\{")  & !is.na(branching_logic))
   
-  ### extract each embedded vars
-  embedded_vars_all <- str_extract_all(embedded_vars$field_label, "\\{(\\w+)")
-  
-  emb <- lapply(1:length(embedded_vars_all), function(i){
-    if(length(embedded_vars_all[[i]]) == 0) return(NULL)
-    embedded_vars[rep(i, length(embedded_vars_all[[i]])), ] %>% 
-      select(branching_logic_from_ET = branching_logic) %>% 
-      mutate(field_name = gsub("^\\{", "", embedded_vars_all[[i]]))
-  }) %>% 
-    bind_rows()
-  ### mapping with their branching logic from descriptive type
+  if (nrow(embedded_vars) > 0) {
+    ### extract each embedded vars
+    embedded_vars_all <- str_extract_all(embedded_vars$field_label, "\\{(\\w+)")
+    
+    emb <- lapply(1:length(embedded_vars_all), function(i){
+      if(length(embedded_vars_all[[i]]) == 0) return(NULL)
+      embedded_vars[rep(i, length(embedded_vars_all[[i]])), ] %>% 
+        select(branching_logic_from_ET = branching_logic) %>% 
+        mutate(field_name = gsub("^\\{", "", embedded_vars_all[[i]]))
+    }) %>% 
+      bind_rows()
+    ### mapping with their branching logic from descriptive type
+  } else {
+    emb <- data.frame(field_name = as.character(), 
+                      branching_logic_from_ET = as.character())
+    
+  }
   
   ### compare with ds_dd$branching_logic
   ## dd[ dd$field_name %in% emb$field_name, c('field_name','branching_logic')] %>% View()
@@ -1696,10 +1702,10 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   write.csv(meta_list$res_repeatforms, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_repeatforms_{today_tm}.csv"), row.names=F)
   
   formData_xml <- list("token"=tk,
-                      content='project_xml',
-                      returnMetadataOnly='true',
-                      format = "xml",
-                      returnFormat = "xml")
+                       content='project_xml',
+                       returnMetadataOnly='true',
+                       format = "xml",
+                       returnFormat = "xml")
   
   response_xml <- httr::POST(urlapi, body = formData_xml, encode="form")
   result_xml <- content(response_xml)
@@ -1833,7 +1839,7 @@ complete_cfxn <- function(ddv = dd_list[["dd_val"]]) {
 }
 
 # check for out of range values
-val_cfxn <- function(ddv) {
+val_cfxn <- function(ddv, today_dt) {
   ddv %>% 
     filter(!na_or_blank(text_validation_min) | !na_or_blank(text_validation_max)) %>% 
     mutate(
@@ -1844,7 +1850,7 @@ val_cfxn <- function(ddv) {
         T ~ glue("as.numeric({field_name}) < as.numeric('{text_validation_min}')")
       ),
       val_txt_hi = case_when(
-        text_validation_max %in% c("today", "[clab_datemax]") ~ glue("as.Date({field_name}) > as.Date('{rt_date_dt}')"), 
+        text_validation_max %in% c("today", "[clab_datemax]") ~ glue("as.Date({field_name}) > as.Date('{today_dt}')"), 
         text_validation_max == "now" ~ glue("ymd_hm({field_name}) > Sys.time()"), 
         text_validation_type_or_show_slider_number == "date_mdy" & str_detect(text_validation_max, "\\[")  ~ glue("as.Date({field_name}) > as.Date({text_validation_max})") %>% convert_branching_logic(), ## if variable, remove square bracket
         text_validation_type_or_show_slider_number == "date_mdy" ~ glue("as.Date({field_name}) > as.Date('{text_validation_max}')"),
@@ -1863,7 +1869,7 @@ val_cfxn <- function(ddv) {
       )) %>% 
     select(form = form_name, vr= field_name, val_txt, qry_txt, qrycond_txt) %>%
     mutate(check = "range_check",
-           across(val_txt, \(x) gsub("\\(today\\)", "(rt_date_dt)", x)))
+           across(val_txt, \(x) gsub("\\(today\\)", "(today_dt)", x)))
 }
 
 # for each row in all_dd_chks, evaluate val_txt on ds_fdata
@@ -1990,6 +1996,1470 @@ expect_complete_cfxn <- function(ddv = dd_list[["dd_val"]], ds = ds_fdata, cores
   
   qry_out
 }
+
+
+
+#ds_to_table functions
+
+# removes all new line characters (helpful for latex footnotes)
+rm_new_line <- function(str) {
+  gsub("\n", "", str)
+}
+
+# Note that escaping ampersand can cause problems if done too late. 
+# If you add in an ampersand to mark a new column then escaping will remove the new column mark
+# function for preparing text for latex (special characters, etc.)
+latex_escape_fxn <- function(x, incl_amp=T, cell_data=F) {
+  str_out <- str_replace_all(as.character(x), "_", "$\\\\_$") %>% 
+    str_replace_all("#", "\\\\#") %>% 
+    str_replace_all("\\n", " \\\\\\\\ ") %>% 
+    str_replace_all("%", "\\\\%") %>% 
+    str_replace_all("<=", "$\\\\leq$") %>% 
+    str_replace_all(">=", "$\\\\geq$") %>% 
+    str_replace_all("<", "\\\\textless") %>% 
+    str_replace_all(">", "\\\\textgreater")  %>% 
+    str_replace_all("\U2013", "$-$") 
+  if(incl_amp) str_out <- str_replace_all(str_out, "&", "\\\\&")
+  if(cell_data) {
+    str_out <- str_out %>% 
+      str_replace_all("\\[", "{[") %>% str_replace_all("\\]", "]}") %>% 
+      str_replace_all("^ +", "\\\\hspace*{1em}")
+  }
+  
+  str_out
+}
+
+#catpaste function used to format categorical variables for output in tables
+#Inputs:
+#n: numeric; count value that should be reported in table cells
+#N: numeric; denominator, total value that n will be divided by
+#pct: numeric; n/N, percentage that will be reported in table
+#expand: logical; TRUE or FALSE; indicates whether output will be reported as n/N (pct%) or n (pct%)
+#digits: numeric; how many digits pct should be rounded to
+#Required to input either N or pct, not both
+#Output: character string either "n/N (pct%)" or "n (pct%)"
+catpaste <- function(n, N=NULL, pct=NULL, expand=FALSE, digits=1) {
+  if (is.null(pct) & expand==FALSE) {
+    return(paste0(n, ' (', sprintf(n/N*100, fmt = glue("%.{digits}f")), '%)'))
+  }
+  else if (is.null(pct) & expand==TRUE) {
+    return(paste0(n, '/', N, ' (', sprintf(n/N*100, fmt = glue("%.{digits}f")), '%)'))
+  }
+  else if (is.null(N) & expand==FALSE) {
+    return(paste0(n, ' (', sprintf(pct, fmt = glue("%.{digits}f")), '%)'))
+  }
+  else if (is.null(N) & expand==TRUE) {
+    return(paste0(n, '/', N, ' (', sprintf(pct, fmt = glue("%.{digits}f")), '%)'))
+  }
+}
+
+
+
+#ds_to_table function used to transform datasets into tables for reporting
+#Input datasets should be just a catpaste and a pivot away from final table 
+#(i.e. counts should already be computed for categorical variables)
+#Inputs:
+#data: data frame or tibble
+#colmat: data frame with 3 columns; 
+#1) n.cols; names of columns that contain numerators for each cell
+#2) N.cols; names of columns that contain denominators for each cell
+#each n.cols value will be divided by corresponding N.cols value
+#3) col.names; names of columns that will summarize the categorical variables (these will not all show up in final table if grp.var!=NULL)
+#if (3) contains 'Overall', an 'Overall' column will be included on far right side of output table
+#output.cols: either a character string or a vector of strings;
+#names of other columns from original dataset that will be included in output
+#digits: numeric; number of digits that percentages will be rounded to
+#grp.var: character; if this is provided, resulting table will be pivoted wider using this variable
+#arrange.var: character; if this is provided, resulting table rows will be ordered by this variable
+#fill.missing: sting to fill in missing cells with
+#Output: data frame with columns output.cols and col.names, 
+#pivoted so these are repeated for each value of grp.var, if provided, 
+#and rows arranged by arrange.var, if provided
+ds_to_table <- function(data, colmat, output.cols=NULL, expand=FALSE, grp.var=NULL, 
+                        arrange.var=NULL, headn.var=NULL, test_loc) {
+  
+  if(nrow(data)==0) return(as.data.frame(list('Currently no data'), col.names=' '))
+  data <- as.data.frame(data)
+  
+  if(!is.null(grp.var)) suffixes <- unique(data[[grp.var]])
+  
+  n.cols <- colmat$n.cols
+  N.cols <- colmat$N.cols
+  col.names <- colmat$col.names
+  digits <- colmat$digits
+  
+  if (is.null(output.cols)) output.cols <- setdiff(colnames(data), c(n.cols,N.cols,col.names,grp.var))
+  
+  justn <- colmat$n.cols[colmat$col.names!='Overall']
+  noall <- setdiff(n.cols, justn)
+  justN <- colmat$N.cols[colmat$col.names!='Overall']
+  Noall <- setdiff(N.cols, justN)
+  
+  if (!is.null(headn.var)) if (justN == headn.var) justN=as.character()
+  data <- if (!is.null(grp.var)) {
+    data %>%
+      complete(!!sym(grp.var), !!sym(output.cols[1])) %>%
+      mutate(across(all_of(justn), ~replace(.x, is.na(.x), 0))) %>%
+      mutate(across(all_of(Noall), ~replace(.x, is.na(.x), ifelse(all(is.na(.x)), 0, unique(.x[!is.na(.x)]))))) %>%
+      group_by(!!sym(grp.var)) %>%
+      mutate(across(all_of(headn.var), ~replace(.x, is.na(.x), ifelse(all(is.na(.x)), 0, unique(.x[!is.na(.x)]))))) %>%
+      ungroup() %>%
+      group_by(!!sym(output.cols[1])) %>%
+      mutate(across(all_of(justN), ~replace(.x, is.na(.x), ifelse(all(is.na(.x)), 0, unique(.x[!is.na(.x)])[1])))) %>%
+      mutate(across(all_of(noall), ~replace(.x, is.na(.x), ifelse(all(is.na(.x)), 0, unique(.x[!is.na(.x)])[1])))) %>%
+      ungroup()
+    
+  }
+  else {
+    data %>%
+      complete(!!sym(output.cols[1])) %>%
+      mutate(across(all_of(justn), ~replace(.x, is.na(.x), 0))) %>%
+      mutate(across(all_of(N.cols), ~replace(.x, is.na(.x), unique(.x[!is.na(.x)])[1]))) %>%
+      ungroup() %>%
+      group_by(!!sym(output.cols[1])) %>%
+      mutate(across(all_of(noall), ~replace(.x, is.na(.x), unique(.x[!is.na(.x)])[1]))) %>%
+      ungroup()
+    
+  }
+  for (i in 1:length(n.cols)) {
+    n <- data[,n.cols[i]]
+    N <- data[,N.cols[i]]
+    data <- as.data.frame(cbind(data, mapply(catpaste, n=n, N=N, expand=expand, digits=digits[i])))
+    colnames(data)[ncol(data)] <- col.names[i]
+  }
+  if (!is.null(headn.var)) {
+    data <- data %>%
+      mutate(!!sym(grp.var):=paste0(.data[[grp.var]], '\n(n=',.data[[headn.var]], ')'))
+    oN <- ifelse ('Overall' %in% col.names,
+                  unique(data[,N.cols][which(col.names=='Overall')]), '')
+  } 
+  if (!is.null(grp.var) & !is.null(arrange.var)) {
+    if('Overall' %in% col.names) {
+      data <- data %>%
+        select(all_of(output.cols), .data[[grp.var]], all_of(col.names)) %>%
+        pivot_wider(names_from=.data[[grp.var]], values_from=c(output.cols[-1],
+                                                               col.names[-which(col.names=='Overall')])) %>%
+        arrange(as.character(.data[[arrange.var]]))
+    }
+    else {
+      data <- data %>%
+        select(all_of(output.cols), .data[[grp.var]], all_of(col.names)) %>%
+        pivot_wider(names_from=.data[[grp.var]], values_from=c(output.cols[-1], !!(col.names))) %>%
+        arrange(as.character(.data[[arrange.var]]))
+    }
+    
+    names_to_order <- names(data)[unlist(lapply(paste0('_', suffixes), grep, x=names(data)))]
+    names_id <- setdiff(names(data), names_to_order)
+    data <- data %>%
+      select(all_of(names_id), names_to_order)
+  }
+  else if (!is.null(grp.var) & is.null(arrange.var)) {
+    if('Overall' %in% col.names) {
+      data <- data %>%
+        select(all_of(output.cols), .data[[grp.var]], all_of(col.names)) %>%
+        pivot_wider(names_from=.data[[grp.var]], values_from=c(output.cols[-1],
+                                                               col.names[-which(col.names=='Overall')]))
+    }
+    else {
+      data <- data %>%
+        select(all_of(output.cols), .data[[grp.var]], all_of(col.names)) %>%
+        pivot_wider(names_from=.data[[grp.var]], values_from=c(output.cols[-1], !!(col.names)))
+    }
+    
+    names_to_order <- names(data)[unlist(lapply(paste0('_', suffixes), grep, x=names(data)))]
+    names_id <- setdiff(names(data), names_to_order)
+    data <- data %>%
+      select(names_id, names_to_order)
+  }
+  else if (is.null(grp.var) & !is.null(arrange.var)) {
+    data <- data %>%
+      select(all_of(output.cols), all_of(col.names)) %>%
+      arrange(as.character(.data[[arrange.var]]))
+  }
+  else {
+    data <- data %>%
+      select(all_of(output.cols), all_of(col.names))
+  }
+  if ('Overall' %in% col.names) {
+    data <- data %>%
+      select(-Overall, Overall)
+    colnames(data)[colnames(data)=='Overall'] <- ifelse(!is.null(headn.var), paste0('Overall\n(n=', oN, ')'), 
+                                                        'Overall')
+  }
+  
+  # If a row is missing then this should be printed as such and left out of counts.
+  # Move to summ_tab negates the need for this
+  # data <- data %>%
+  #   mutate(across(-1, ~ case_when(
+  #     is.na(!!sym(output.cols)) ~ gsub(" \\(.+\\)", "", .x),
+  #     T ~ .x
+  #   ))) %>%
+  #   mutate(across(-1, ~ case_when(
+  #     is.na(!!sym(output.cols)) ~ replace(.x, is.na(.x), 0), 
+  #     T ~ .x
+  #   )))
+  if(!missing(test_loc)) {
+    all_fls <- list.files(test_loc)
+    if(length(all_fls) == 0) {
+      write.csv(data, file.path(test_loc, "test_tab_1_dst.csv"), row.names = F)
+    } else {
+      regexd_n <- max(as.numeric(gsub('_.*.csv', '', gsub('test_tab_','',all_fls))))
+      # annoying regex to get number
+      write.csv(data, glue("{test_loc}/test_tab_{regexd_n+1}_dst.csv"), row.names = F)
+    }
+  }
+  
+  
+  return(data)
+}
+
+#add_labels function from vr_labels adapted to remove [no label]
+add_labels2 <- function(ds, vr_colnm = "vr") {
+  ds %>% 
+    left_join(vr_labels, by=vr_colnm) %>% 
+    mutate(across(vrlabel, ~ ifelse(is.na(vrlabel), vr, vrlabel)))
+}
+
+
+# splitting out summary df from output
+summ_df <-  function(ds, vrs, grp=as.character(), vrnm = "Characteristic", overall=T, headn=F, 
+                     digits=0, denom=F, test_loc, rm_levs = as.character(c()), cts_summ = "mean"){
+  
+  dsg <- if(length(grp) == 0){
+    ds %>% ungroup()
+  } else {
+    
+    if(overall) {
+      dsg_o <- bind_rows(ds, ds %>% mutate(!!sym(grp[length(grp)]) := as.factor("Overall")))
+    } else {
+      dsg_o <- ds
+    }
+    
+    dsg_o %>%
+      #mutate(across(c(!!!syms(grp)), as.character)) %>% 
+      group_by(!!!syms(grp))
+  }
+  na_str <- '0 (0%)' # this doesn't really cut it since denominator needs to be included and later on when used it doesn't know the denom
+  na_miss_str <- '0'
+  if(cts_summ == "mean") {
+    cts_fxn <- function(x) {
+      ct_str <- glue("{round(mean(x, na.rm=T), digits=digits)} ({round(sd(x, na.rm=T), digits=digits)})")
+      tribble(
+        ~level, ~val,
+        "Mean (SD)", ct_str, 
+        "Missing", glue("{sum(is.na(x))}")
+      ) %>% 
+        mutate(tot_cnt=sum(!is.na(x))) %>% 
+        list()
+    }
+  }
+  if(cts_summ == "median") {
+    cts_fxn <- function(x) {
+      ct_str <- glue("{round(median(x, na.rm=T))} ({round(quantile(x, 0.25, na.rm = T))}, {round(quantile(x, 0.75, na.rm = T))})")
+      tribble(
+        ~level, ~val, 
+        "Median (Q1, Q3)", ct_str, 
+        "Missing", glue("{sum(is.na(x))}")
+      ) %>%
+        mutate(tot_cnt = sum(!is.na(x))) %>%
+        list()
+    }
+  }
+  
+  fxn_npct <- function(num, denom, zero_rep="0", null_rep="NA"){
+    case_when(
+      denom == 0 ~ null_rep,
+      num == 0 ~ zero_rep,
+      T ~ sprintf("%g/%g (%1.0f%%)", num, denom, 100*num/denom)
+    )
+  }
+  
+  cat_fxn <- function(x) {
+    levs <- if("factor" %in% class(x)){
+      levels(x)
+    } else {
+      na.omit(unique(x))
+    }
+    
+    glue_str_fxn <- function(num, denom) sprintf("%g (%1.*f%%)", num, digits, 100*num/denom)
+    if(denom) glue_str <- glue_str_fxn <- function(num, denom) sprintf("%g/%g (%1.*f%%)", num, denom, digits, 100*num/denom)
+    
+    if(denom) na_str <- '0/{denom[1]} (0%)'
+    
+    ds_tot_all <- tibble(level=levs) %>% 
+      mutate(tot_cnt = sum(x %!in% c(NA, rm_levs)))
+    
+    miss_str <- ifelse("Missing" %in% x, "Missing_na", "Missing")
+    
+    ds_out <- tibble(level = x) %>% 
+      group_by(level) %>% 
+      summarise(num_val=n(), 
+                .groups="drop") %>% 
+      ungroup() %>% 
+      full_join(ds_tot_all, by = "level") %>% 
+      mutate(across(level,  ~ factor(ifelse(na_or_blank(.x), miss_str, as.character(.x)), c(levs, miss_str)))) %>% 
+      mutate(across(num_val, ~ ifelse(is.na(.x), 0, .x)),
+             val = case_when(
+               level %in% c(rm_levs, miss_str) ~ paste(num_val),
+               T ~ glue_str_fxn(num_val, tot_cnt))) %>% 
+      arrange(level) 
+    list(ds_out)
+  }
+  
+  not.numeric <- function(x) !is.numeric(x)
+  
+  ds_out_cat_list <- dsg %>% 
+    select(all_of(c(vrs, grp))) %>% 
+    summarise(across(where(not.numeric), cat_fxn),
+              across(where(is.numeric), cts_fxn)) 
+  
+  ds_out_cat <- lapply(1:nrow(ds_out_cat_list), function(i) {
+    bind_rows(lapply(setdiff(names(ds_out_cat_list), grp), function(x) {
+      ds_out_cat1 <- ds_out_cat_list[i, ]
+      if(!"list" %in% class(ds_out_cat1)) ds_out_cat1 <- ds_out_cat1[[x]]
+      as.data.frame(ds_out_cat1[[1]]) %>% mutate(vr = x)
+    })) %>% 
+      bind_cols(ds_out_cat_list[i, grp])
+  }) %>% bind_rows() 
+  if (length(grp)>0) {
+    temp_split_str <- "<<<<<II>>>>>"
+    get_el <- function(x, splt, i){
+      unlist(lapply(strsplit(as.character(x), splt), function(x) {
+        if(length(x) < i) return(as.character(NA))
+        x[[i]]
+      }))
+    }
+    all_vr_levs <- unique(apply(ds_out_cat[c("vr", "level")], 1, paste, collapse=temp_split_str))
+    ds_out_cat <- ds_out_cat %>%
+      mutate(vrlevel=factor(paste0(vr, temp_split_str, level), all_vr_levs)) %>%
+      complete(!!sym(grp), vrlevel) %>%
+      mutate(level=get_el(vrlevel, temp_split_str, 2), 
+             vr=get_el(vrlevel, temp_split_str, 1)) %>%
+      group_by(vr) %>%
+      mutate(val= case_when(
+        is.na(val) & level == "Missing" ~ as.character(na_miss_str), 
+        is.na(val) ~ as.character(na_str),
+        T ~ as.character(val))) %>%
+      select(-vrlevel) 
+  }
+  
+  ds_out_cat
+}
+
+summ_tab <- function(ds, vrs, grp=as.character(), vrnm = "Characteristic", overall=T, headn=F, 
+                     digits=0, denom=F, test_loc, rm_levs= as.character(c()),
+                     outlist=F, cts_summ = "mean", cat_fxn){
+  
+  if(nrow(ds)==0) {
+    if(outlist) { 
+      return(list(ds_out=as.data.frame(list('Currently no data'), col.names=' '), 
+                  ds_out_wide=as.data.frame(list('Currently no data'), col.names=' ')))
+    } else {
+      return(as.data.frame(list('Currently no data'), col.names=' '))  
+    }
+  }
+  if(length(grp) == 0) {
+    if("temp_summ_tab_grp" %in% names(ds)) stop("Why is temp_summ_tab_grp already a variable?")
+    grp = "temp_summ_tab_grp"
+    ds <- ds %>%
+      mutate(!!sym(grp) := as.factor("temp_summ_tab_grp"))
+  }
+  if (any(is.na(ds[[grp]]))) stop("Error: missing values in grp variable")
+  
+  if (!("factor" %in% class(ds[[grp]]))) {
+    ds <- ds %>%
+      mutate(!!sym(grp) := as.factor(!!sym(grp)))
+  }
+  if(overall) levels(ds[[grp]]) <- c(levels(ds[[grp]]), 'Overall')
+  
+  ds_out_raw <- summ_df(ds, vrs, grp, vrnm, overall, headn, digits, denom, test_loc, rm_levs, cts_summ) %>% 
+    ungroup() %>% 
+    mutate(across(vr, \(x) factor(x, levels=vrs)),
+           across(level, factor)) %>% 
+    arrange(vr, !!!syms(grp)) %>% 
+    add_labels2() 
+  
+  ds_out <- ds_out_raw %>%
+    select(-any_of(c("num_val", "vr"))) %>% 
+    relocate(!!sym(vrnm) := vrlabel, !!(grp), Level=level, Value=val)
+  
+  if(length(grp) == 0) return(ds_out)
+  grps <- ds[[grp[length(grp)]]]
+  ugrps <- if("factor" %in% class(grps)) {
+    levels(grps)
+  } else {
+    grp_levs <- unique(grps)
+    grp_levs[order(grp_levs)]
+  }
+  #if(overall) ugrps = c(ugrps, "Overall")
+  if(headn) {
+    
+    groupN <- ds %>%
+      group_by(!!sym(grp)) %>%
+      summarize(n=n()) %>%
+      complete(!!sym(grp), fill=list(n=0)) %>%
+      mutate(newlab = mapply(paste0, !!sym(grp), '\n(n=', n, ')')) %>%
+      select(-n) %>%
+      mutate(!!sym(grp) := as.character(!!sym(grp))) %>% 
+      na.omit()
+    new.ugrps <- unique(groupN$newlab)
+    if(overall) {
+      groupN <- groupN %>% filter(!!sym(grp)!='Overall')
+      overallN <- nrow(ds)
+      groupN <- rbind(groupN, c('Overall', paste0('Overall\n(n=', overallN, ')')))
+      new.ugrps <- unique(groupN$newlab)
+    }
+    
+    ds_out_wide <- setNames(data.frame(ugrps), grp[length(grp)]) %>% 
+      left_join(ds_out %>% select(-any_of("tot_cnt")), by = grp) %>% 
+      left_join(groupN, by = grp) %>%
+      select(-!!sym(grp)) %>%
+      pivot_wider(names_from=newlab, values_from=c(Value)) %>% 
+      mutate(across(all_of(new.ugrps), ~ ifelse(is.na(.x), "", .x)))
+    
+    if(length(vrs) == 1) ds_out_wide = ds_out_wide[-1] %>% rename(!!sym(vrs) := Level)
+    if(grp == "temp_summ_tab_grp"){
+      ds_out_wide <- ds_out_wide %>% select(-starts_with("temp_summ_tab_grp"))
+    }
+    
+    if(!missing(test_loc)) {
+      all_fls <- list.files(test_loc)
+      if(length(all_fls) == 0) {
+        write.csv(ds_out_wide, file.path(test_loc, "test_tab_1_st.csv"), row.names = F)
+      } else {
+        regexd_n <- max(as.numeric(gsub('_.*.csv', '', gsub('test_tab_','',all_fls[length(all_fls)]))))
+        write.csv(ds_out_wide, glue("{test_loc}/test_tab_{regexd_n+1}_st.csv"), row.names = F)
+      }
+    }
+  } else {
+    
+    ds_out_wide <- setNames(data.frame(ugrps), grp[length(grp)]) %>% 
+      left_join(ds_out %>% select(-any_of("tot_cnt")), by=grp) %>% 
+      pivot_wider(names_from=grp[length(grp)], values_from=c(Value)) %>% 
+      mutate(across(all_of(ugrps), ~ ifelse(is.na(.x), "", .x)))
+    
+    if(length(vrs) == 1) ds_out_wide = ds_out_wide[-1] %>% rename(!!sym(vrs) := Level)
+    
+    if(!missing(test_loc)) {
+      all_fls <- list.files(test_loc)
+      if(length(all_fls) == 0) {
+        write.csv(ds_out_wide, file.path(test_loc, "test_tab_1_st.csv"), row.names = F)
+      } else {
+        regexd_n <- max(as.numeric(gsub('_.*.csv', '', gsub('test_tab_','',all_fls[length(all_fls)]))))
+        write.csv(ds_out_wide, glue("{test_loc}/test_tab_{regexd_n+1}_st.csv"), row.names = F)
+      }
+    }
+    
+    if(grp == "temp_summ_tab_grp"){
+      ds_out_wide <- ds_out_wide %>% select(-starts_with("temp_summ_tab_grp"))
+    }
+  }
+  
+  if(outlist) return(list(ds_out=ds_out_raw, ds_out_wide=ds_out_wide))
+  return(ds_out_wide)
+}
+
+#printtabon creates flextable object to print in final OSMB report
+#Inputs:
+#tab: data frame; output from ds_to_table() or summ_tab()
+#this should already have columns in order you want for final table
+#col.names: vector of character stings; names of columns in output, if different from input df's column names. If shorter than number of columns in table then will append extra column names assuming provided were sequential colnames starting from left.
+#merge.cols: character string; name of column(s) that should be merged vertically
+#merge.cols: character string; name of column(s) that should be merged vertically
+#groupheader: logical T/F; whether to include a separate header row for group used as grp.var or grp in 
+#ds_to_table() or summ_tab(), respectively
+#col.percent: logical T/F; indicates whether percentages are column percents and changes footnote accordingly
+#all.cat: logical T/F; indicates whether all variables in table are categorical and changes footnote accordingly
+#all.cont: logical T/F; indicates whether all variables in table are continuous and changes footnote accordingly
+#sub0: logical T/F: indicates whether to replace "0%" with "<1%" in table
+# latex_hline_above is a vector of numbers
+# hline_above_last is a boolean
+
+#' printtab_tex is called in printtab() to handle outputting latex files from 
+#' printtab() function
+
+printtab_tex <- function(tab, latex_flnm, custom.foot, merge.cols=NULL,  merge.cols.green = NULL,
+                         latex_hline_above, colspec_tex="", one_switch, l_switch, x_switch, 
+                         hline_above_last, vline,spec_pop3=F, col.names, adv_events, pres=F,
+                         bold_row, pagebreak_lines=as.numeric()){
+  
+  names(tab) <- col.names
+  
+  if(missing(vline)) vline=NULL
+  else if(vline) vline = "|"
+  else if(!vline) vline = NULL
+  
+  
+  if(!is.null(merge.cols)){
+    extra_lines <- !duplicated(tab[merge.cols[1]])
+    extra_lines[1] <- F
+  } else {
+    extra_lines <- rep(F, nrow(tab))
+  }
+  
+  if(spec_pop3) {
+    tab <- tab[-1]
+    tab <- bind_rows(tab[1:6,], tab[7, ], tab[7:nrow(tab), ])
+    merge.cols = NULL
+    merge.cols.green = NULL
+    extra_lines <- rep(F, nrow(tab))
+    extra_lines[7:8] <- T
+  }
+  
+  if(missing(hline_above_last)) hline_above_last = F
+  if(!missing(latex_hline_above) & !hline_above_last) extra_lines[latex_hline_above] <- T
+  
+  if(hline_above_last) extra_lines[nrow(tab)] <- T
+  
+  to_split_in_two <- c(F, sapply(select(tab, -1), function(x) any(grepl("\\(\\d+%", x))))
+  
+  colnms_tab <- tibble(colnm= names(tab)) %>% 
+    mutate(across(colnm, ~ifelse(.x %in% c("", " "), "~", latex_escape_fxn(.x)))) %>% 
+    mutate(across(colnm, ~ ifelse(to_split_in_two, 
+                                  paste0("\\n\\SetCell[c=2]{c}{", .x, "} & "), 
+                                  paste0("\\n\\SetCell[c=1]{c}{", .x, "}")))) 
+  
+  mk_merged_row <- function(ds, grp_cols, col=''){
+    
+    mc_vr = grp_cols[length(grp_cols)]
+    ds %>% 
+      mutate(mmr_row_cnty= rep(n(), n()),
+             mmr_row_cntin = 1:n(),
+             .by=all_of(c(grp_cols))) %>% 
+      mutate(mc_vr_prefix = paste0("\\SetCell[r=", mmr_row_cnty,
+                                   "]{", col,
+                                   "} "),
+             across(any_of(!!mc_vr), \(x) ifelse(mmr_row_cntin > 1, 
+                                                 unlist(lapply(str_extract_all(x, " &"), \(xx) paste(xx, collapse=" "))), 
+                                                 paste(mc_vr_prefix, str_replace_all(x, " &", paste0(" &\\", mc_vr_prefix)))))) %>% 
+      select(-c(mc_vr_prefix, mmr_row_cntin, mmr_row_cnty))
+    
+  }
+  
+  split_checkna <- function(x){
+    
+    find_parens <- gregexpr('\\(', x)
+    lapply(1:length(find_parens), function(i){
+      
+      n_split = max(find_parens[[i]])
+      if(n_split %in% c(NA, -1)) return(paste0(x[i], " & "))
+      paste0(substr(x[i], 1, n_split-1), " & ", substr(x[i], n_split, nchar(x[i])))
+    }) %>% unlist()
+  }
+  
+  tab_replace <- tab %>%
+    ungroup() %>% 
+    mutate(across(everything(), \(x) latex_escape_fxn(x, cell_data=T)),
+           across(all_of(names(to_split_in_two)[to_split_in_two]), split_checkna))
+  
+  if(!is.null(merge.cols)) {
+    for(mi in length(merge.cols):1){
+      tab_replace <- tab_replace %>% 
+        mk_merged_row(merge.cols[1:mi], col="gray_z")
+    }
+  } else if(!is.null(merge.cols.green)){
+    for(mi in length(merge.cols.green):1){
+      tab_replace <- tab_replace %>% 
+        mk_merged_row(merge.cols.green[1:mi])
+    }
+  }
+  
+  
+  
+  if(!is.null(merge.cols[1]) | !is.null(merge.cols.green[1])){
+    switch_vctr <- rep(1, nrow(tab_replace))
+    top_merge <- c(merge.cols, merge.cols.green)[1]
+    grp_switches <- which(tab_replace[[top_merge]] != "")[-1]
+    switch_vctr[grp_switches-1] <- 0
+  } else {
+    switch_vctr <- rep(0, nrow(tab_replace))
+  }
+  
+  # switch_vctr <- rep(0, nrow(tab_replace))
+  
+  if(!missing(bold_row)) {
+    tab_replace[bold_row, ] <- tab_replace[bold_row, ] %>% 
+      mutate(across(everything(), ~paste("\\rowstyle{\\bfseries}", gsub("&", "& \\\\rowstyle{\\\\bfseries}", .x))))
+  }
+  
+  names(tab_replace) <- colnms_tab$colnm
+  
+  ## This should probably always be the last operation on tab_in
+  ## spec_pop3 is a very breakable exception
+  tab_in_rows <- c(paste0(paste(names(tab_replace), collapse=" & "), "\\\\\\n"),
+                   paste0(apply(tab_replace, 1, paste, collapse=" & "), 
+                          c(sapply(switch_vctr[-1*length(switch_vctr)], function(stari) ifelse(stari==0, "\\\\\\n", "\\\\*\\n")),
+                            "\\n")))
+  if(length(pagebreak_lines) > 0){
+    tab_in_rows[pagebreak_lines] <- paste("\\pagebreak\\n", tab_in_rows[pagebreak_lines])
+  }
+  tab_in <- paste(tab_in_rows, 
+                  collapse="")
+  
+  if(spec_pop3) {
+    all_rows <- c(paste(names(tab_replace), collapse=" & "),
+                  apply(tab_replace, 1, paste, collapse=" & "))
+    all_rows[8] <- "\\SetCell[c=11]{l}{\\bf U.S. Census Region/Division:}"
+    tab_in <- paste(all_rows, collapse="\\\\\\n")
+  }
+  
+  if(adv_events) {
+    top_row <-"\\SetCell[r=8]{l}{\\bf Infected \\& Uninfected}"
+    rbind(top_row, tab_in)
+  }
+  rows <- if(length(merge.cols) > 1 | (length(merge.cols) == 0 & length(merge.cols.green) > 1)) {
+    gsub("\\|$", "", paste(rep('Q[m]|', nrow(tab) ), collapse=""))
+  } else {
+    tibble(xline=  c("", "|")[extra_lines + 1],
+           row_def = rep('Q[m]', nrow(tab) )) %>%
+      apply(1, paste, collapse="") %>% 
+      paste0(collapse = "")
+    
+  }
+  
+  
+  col_spec <- c("Q[r]", "Q[r]Q[l]")[as.numeric(to_split_in_two) + 1]
+  if(!missing(one_switch)) col_spec[one_switch] <- gsub("Q\\[r]", "X[1]", col_spec[one_switch])
+  if(!missing(x_switch)) col_spec[x_switch] <- gsub("Q", "X", col_spec[x_switch])
+  if(!missing(l_switch)) col_spec[l_switch] <- gsub("r", "l", col_spec[l_switch])
+  
+  cols <- paste0(col_spec, collapse="|")
+  #rep("R{0.06\textwidth} C{0.01\textwidth} L{0.10\textwidth} |", ncol(tab_replace))
+  header_style <- ifelse(pres, 
+                         "|}, row{odd}={bg=NavyBlue!50!DarkOliveGreen!15}, row{1}={bg=NavyBlue!50!DarkOliveGreen, fg=white, font=\\sffamily}}\\n",
+                         "|}, row{odd}={bg=CadetBlue!8}, row{1}={bg=CadetBlue, fg=white, font=\\sffamily}}\\n")
+  # The following three lines ensures \n is evaluated
+  
+  file_str_list <- str_split(latex_flnm, "_|/")[[1]]
+  len_f <- length(file_str_list)
+  file_ref <- file_str_list[len_f-1]
+  file_ref_list <- strsplit(file_ref, "s|o")[[1]]
+  incl_header = as.numeric(file_ref_list[2]) > 0
+  filename_clean = gsub(".tex$", "",  file_str_list[len_f])
+  
+  latex_header_info = paste0("caption = {",
+                             filename_clean,
+                             "},
+                         note{} = {",
+                             latex_escape_fxn(custom.foot),
+                             "},
+                         label = {tab:",
+                             file_ref,
+                             "}")
+  
+  latex_noheader_info = paste0("entry=none,
+                              caption=,
+                              label=none
+                         ")
+  
+  tab_type <- ifelse(pres, "tblr", "longtblr")
+  
+  tab_start_str <- if(pres){
+    paste0("\\begin{", tab_type, "}")
+  } else {
+    paste0( "\\begin{",
+            tab_type,
+            "}[
+                         theme = drctab,
+                         ",
+            ifelse(incl_header, latex_header_info, latex_noheader_info),
+            "]")
+  }
+  
+  latex_string <- paste( tab_start_str,
+                         "
+                         {colspec={", 
+                         # vline,
+                         cols, 
+                         "}",
+                         colspec_tex,
+                         ", rowhead=1, rowspec={||Q[m]|", 
+                         rows, 
+                         header_style,
+                         tab_in, 
+                         "\\n\\end{",
+                         tab_type, 
+                         "}", 
+                         sep="")
+  str_list <- strsplit(latex_string,  "\\\\n(?!ormalsize)", perl=T)
+  # for debugging
+  #cat(str_list[[1]], sep="\n", file=file.path('./tex100.tex'))
+  
+  cat(custom.foot, file = gsub("tables/", "footers/", gsub(".tex$", "_footer.tex", latex_flnm)))
+  
+  cat(str_list[[1]], sep="\n", file = file.path(latex_flnm))
+  
+}
+
+printtab <- function(tab, col.names=colnames(tab), merge.cols=NULL, merge.cols.green=NULL,
+                     groupheader=FALSE, footnote=T, col.percent=T, all.cat=T, all.cont=F, 
+                     headrows.var=NULL, zebra=T, custom.foot=as.character(), au = F, 
+                     str = "", latex_flnm, sub0 = F, latex_hline_above, colspec_tex="", 
+                     one_switch, l_switch, x_switch, hline_above_last, vline, spec_pop3=F, adv_events=F,
+                     pres=F, bold_row, color = "#EAF1DD", pagebreak_lines=as.numeric()) {
+  
+  if(length(col.names) < ncol(tab)) col.names = c(col.names, colnames(tab)[-1*(1:length(col.names))])
+  if (dim(tab)[1]==1 & dim(tab)[2]==1) 
+    if (tab == as.data.frame(list('Currently no data'), col.names=' ')) {
+      col.names=' '
+    }
+  if (sub0==TRUE) {
+    tab <- tab %>%
+      mutate(across(everything(), ~sub("(^|\\()(0%)", "\\1<1%", .x))) %>%
+      mutate(across(everything(), ~ sub("(^|\\()(0.0%)", "\\1<0.1%", .x)))
+  }
+  if (groupheader==TRUE) {
+    header1 <- col.names
+    header2 <- colnames(tab) 
+    header2[!grepl(".*_", header2)] <- " "
+    header2 <- sub('.*_', '', header2)
+  }
+  else colnames(tab) <- col.names
+  nonlevel.cols <- setdiff(which(col.names!='Level'),1)
+  
+  tab1 <- tab %>% 
+    mutate(across(1, ~ ifelse(na_or_blank(.x), "Missing", as.character(.x))))
+  if (!is.null(headrows.var)) {
+    tab1 <- tab1 %>%
+      as_grouped_data(groups=headrows.var)
+    fillj <- which(!is.na(tab1[,headrows.var]))
+    tab1 <- tab1 %>%
+      mutate(across(everything(), ~as.character(.x))) %>%
+      mutate(across(everything(), ~ case_when(!is.na(!!sym(headrows.var)) ~ 
+                                                replace(.x, is.na(.x), .data[[headrows.var]][is.na(.x)]), 
+                                              T ~ .x))) %>%
+      select(-!!sym(headrows.var))
+    nonlevel.cols <- setdiff(which(names(tab1)!='Level'),1)
+  }
+  
+  if(!missing(latex_flnm)) printtab_tex(tab, latex_flnm, custom.foot, merge.cols, merge.cols.green,
+                                        latex_hline_above=latex_hline_above, colspec_tex=colspec_tex, 
+                                        one_switch=one_switch, l_switch=l_switch, 
+                                        x_switch=x_switch, hline_above_last=hline_above_last, vline=vline,
+                                        spec_pop3=spec_pop3, col.names=col.names, adv_events=adv_events, pres=pres, bold_row = bold_row,
+                                        pagebreak_lines=pagebreak_lines)
+  
+  prtab <- tab1 %>%
+    flextable() %>%
+    autofit() %>%
+    bold(part='header')
+  if (zebra) {
+    prtab <- prtab %>%
+      theme_zebra(even_header = color, even_body = color, 
+                  odd_header='transparent', odd_bod='transparent') %>%
+      border(border.top=fp_border(color='black'), 
+             border.bottom=fp_border(color='black'), 
+             part='body')
+    if (!is.null(merge.cols) | !is.null(merge.cols.green)) {
+      prtab <- prtab %>%
+        bg(j=c(merge.cols, merge.cols.green), bg=color, part='body')
+    }
+  }
+  prtab <- prtab %>%
+    align(align='left') %>%
+    align(j=nonlevel.cols, align='center', part='all')
+  if (groupheader==TRUE) {
+    prtab <- prtab %>%
+      delete_part(part='header') %>%
+      add_header_row(header1, top=FALSE) %>%
+      add_header_row(header2, top=TRUE) %>%
+      merge_h(part='header') %>%
+      bold(part='header') %>%
+      align(align='left') %>%
+      align(j=nonlevel.cols, align='center', part='all')
+  }
+  if (!is.null(merge.cols) | !is.null(merge.cols.green)) {
+    prtab <-prtab %>%
+      merge_v(j=(c(merge.cols, merge.cols.green))) %>%
+      valign(valign='top') %>%
+      valign(j=nonlevel.cols, valign='center', part='body')
+  }
+  if (!is.null(headrows.var)) {
+    prtab <- prtab %>%
+      merge_h(i = fillj) %>%
+      align(i = fillj, align='center')
+    if (zebra) {
+      prtab <- prtab %>%
+        bg(i=fillj, bg='transparent', part='body') %>%
+        bg(i=setdiff(1:nrow(tab1),fillj), bg=color, part='body')
+    }
+  }
+  i = 16.5 # width of the side borders in the word_document output (in centimeters)
+  w = i*0.3937 # width of the side borders in the word_document output (in inches)
+  auto_widths <- (dim(prtab)$widths + 2)/sum((dim(prtab)$widths + 2))
+  prtab <- width(prtab, width = w*auto_widths)
+  colrow='row'
+  if (col.percent) colrow='column'
+  fn.str="Continuous data is in the format \"n=n, mean (SD)\" and categorical data \"n (%)\". All percentages are {colrow} percents excluding participants with missing data."
+  if (all.cat) fn.str="Data is in the format \"n (%)\". All percentages are {colrow} percents excluding participants with missing data."
+  if (all.cont) fn.str="Data is in the format \"n=n, mean (SD)\". All percentages are {colrow} percents excluding participants with missing data."
+  if (au == T) str = "Recruitment of \"Acute Uninfected\" participants has not yet started. \n"
+  if (footnote) {
+    prtab <- prtab %>%
+      add_footer_lines(values = glue(str, fn.str)) %>%
+      font(fontname='Arial', part='all') %>%
+      padding(padding.top=1, padding.bottom=1)
+    if (length(custom.foot) > 0) 
+      prtab <- prtab %>%
+        add_footer_lines(custom.foot)
+    return(prtab)
+  }
+  prtab <- prtab %>%
+    font(fontname='Arial', part='all') %>%
+    padding(padding.top=1, padding.bottom=1)
+  if (length(custom.foot) > 0) 
+    prtab <- prtab %>%
+    add_footer_lines(custom.foot)
+  return(prtab)
+}
+
+
+
+#----------------------------------DEMO FUNCTION---------------------------------------
+
+demo_fxn <- function(tab, grp=as.character(), headn=T, denom=T, overall=T, 
+                     vrs, vrs_list, incl_missing=T, outlist=F, rm_levs = as.character(c()), cts_summ = "mean") {
+  
+  if(!missing(vrs)){
+    st_vrs <- unlist(lapply(vrs, function(vr) {
+      if(vr %in% names(vrs_list)) return(vrs_list[[vr]])
+      vr
+    }))
+  } else {
+    st_vrs <- unname(unlist(vrs_list))
+  }
+  
+  res_obj <- summ_tab(tab, st_vrs, grp=grp, headn=headn, denom=denom, overall=overall, outlist=outlist, rm_levs=rm_levs, cts_summ=cts_summ) 
+  
+  get_notblank <- function(x) {
+    x[!x==""]
+  }
+  if(outlist) {
+    res <- res_obj$ds_out_wide
+  } else {
+    res <- res_obj
+  }
+  for(grp_vrs_nm in get_notblank(names(vrs_list))){
+    grp_vrs <- vrs_list[[grp_vrs_nm]]
+    grp_vrs_labs <- setNames(vr_labels$vrlabel, vr_labels$vr)[grp_vrs]
+    grp_vrs_labs[is.na(grp_vrs_labs)] <- grp_vrs[is.na(grp_vrs_labs)]
+    res <- res %>% 
+      filter(!(Characteristic %in% grp_vrs_labs & Level == "XXXNOTXXX"))
+    if(incl_missing) {
+      res <- res %>% filter(!(Characteristic %in% grp_vrs_labs[-length(grp_vrs_labs)] & Level == "Missing"))
+    } else {
+      res <- res %>% filter(Level != "Missing")
+    }
+    
+    res <- res %>% mutate(across(Level, ~ ifelse(Characteristic %in% grp_vrs_labs & (is.na(.x) | .x == ""), "Mean (SD)", as.character(.x))))
+    res$Characteristic[res$Characteristic %in% grp_vrs_labs] <- grp_vrs_nm
+  }
+  
+  if(outlist) return(c(res_obj, list(summ_ds = ungroup(res))))
+  return(ungroup(res))
+}
+#------------------------------------Transpose Table Function----------------------------
+
+transpose_table <- function(tab) {
+  res <- tab %>%
+    t() %>%
+    as.data.frame()
+  colnames(res) <- res[1,]
+  res <- res[-1,]
+  res$rows <- rownames(res)
+  rownames(res) <- NULL
+  res.final <- res %>%
+    select(rows, all_of(colnames(res)[-length(colnames(res))]))
+  return(res.final)
+}
+
+comp_tab_fxn <- function(ds, ac, headn = F){
+  if(nrow(ds) == 0) return(regulartable(tibble(` `= "Currently No Data"))) 
+  if (headn == T) {
+    ds %>%
+      mutate(form_f = glue("{form_f} (n={enrollN})")) %>%
+      ds_to_table(colmat=colmat_bcomp, expand=F) %>% 
+      mutate(across(all_of(ac), ~ gsub(" .+", "%", .x))) %>% 
+      transpose_table()
+  }
+  else {
+    ds %>%
+      ds_to_table(colmat=colmat_bcomp, expand=T) %>% 
+      mutate(across(all_of(ac), ~ gsub("/.+", "%", .x))) %>% 
+      transpose_table()
+  }
+}
+
+#### Function for creating new AE table ####
+
+# data needs to have a column called "ae_yn" indicating whether each event is an AE
+ae_to_table <- function(vars, ds, id.var, grp = NULL, digits = 1) {
+  summ_grp_fxn <- function(ds_in, grp, id.var, x=NULL, digits=0){
+    
+    ds_in %>%
+      mutate(n_tot = length(unique(!!sym(id.var))),
+             .by=!!sym(grp)) %>%
+      filter(ae_yn == "Yes") %>% 
+      summarize(n_event = n(), 
+                n = length(unique(!!sym(id.var))), 
+                n_tot = unique(n_tot),
+                .by=c(!!!syms(c(grp, x)))) %>%
+      mutate(pct = sprintf("%1.*f%%", digits, n/n_tot * 100)) %>%
+      arrange(!!sym(grp), !!sym(x)) %>% 
+      rename(Level = !!sym(x)) %>%
+      mutate(vr = x)
+  }
+  
+  vars_nms = setNames(names(vars), vars)
+  
+  ds_out <- lapply(c("All AEs", vars), \(x) summ_grp_fxn(x, id = id.var, ds_in = ds %>% mutate(`All AEs`="Total"), grp = grp, digits = digits)) %>%
+    bind_rows() %>% 
+    mutate(vrlabel = coalesce(vars_nms[vr], vr)) %>% 
+    select(-vr) %>%
+    rename(Characteristic = vrlabel) %>% 
+    mutate(across(Level, \(x) replace_na(x, "Missing")))
+  
+  if(length(grp) > 0) {
+    return(ds_out %>%
+             pivot_wider(id_cols = c('Characteristic', 'Level'), 
+                         names_from = !!sym(grp),
+                         values_from = c('n_event', 'n', 'pct'),
+                         names_vary="slowest") %>% 
+             mutate(across(starts_with("n_"), \(x) replace_na(x, 0)),
+                    across(starts_with("pct_"), \(x) replace_na(x, "0.0%"))))
+  } else {
+    return(ds_out %>% 
+             relocate(Characteristic, Level, .before=1) %>% 
+             mutate(across(c(n_event, n), \(x) replace_na(x, 0)),
+                    across(c(pct), \(x) replace_na(x, "0.0%"))))
+  }
+  
+}
+
+##-----Summary table with two or less by group variables-----##
+#generic function:
+#this function depends on another function: demo_fxn()
+#return a Flextable object that summarize data based on the parameter input:
+#a = target data.frame or tibble object
+#v_tar = vector containing target variables of interest
+#v_by_group = by group variables, please have no more than 2 (default = NA)
+#denom = whether to show denominator in percentage calculation or not (default = F)
+summary_table = function(a, v_tar, v_by_group = NA, denom = F) {
+  a = tibble(a)
+  flx_output = NULL
+  if (length(v_by_group) > 2) {
+    stop("By group is more than 2 variables, resulting table is not predictable!")
+  }
+  if (length(v_by_group) == 2 & length(v_tar) >= 2) {
+    stop(glue("When by group has two or more variables, target variable vector 
+    should have only one variabe."))
+  }
+  if (NA %in% v_by_group) {
+    flx_output = demo_fxn(a, vrs_list = v_tar, denom = denom) %>%
+      flextable()
+  } else if (length(v_by_group) == 1) {
+    flx_output = demo_fxn(a, vrs_list = v_tar, grp = v_by_group, denom = denom) %>%
+      flextable()
+  } else {
+    l_by_group = levels(a[[glue("{v_by_group[2]}")]])
+    var_sub_width = length(levels(a[[v_by_group[1]]]))
+    flx_total = a %>%
+      filter(!!sym(v_by_group[2]) %in% l_by_group) %>%
+      demo_fxn(vrs_list = v_tar, overall = T, denom = denom) %>%
+      pivot_longer(cols = names(.)[names(.) %!in% v_tar]) %>%
+      mutate(col_name = paste(name, sep = "."))
+    flx_output = lapply(l_by_group, function(x) {
+      tbl_out = a %>%
+        filter(!!sym(v_by_group[2]) %in% x) %>%
+        demo_fxn(vrs_list = v_tar, grp = v_by_group[1], overall = F, denom = denom) %>%
+        pivot_longer(cols = names(.)[names(.) %!in% v_tar]) %>%
+        mutate(col_name = paste(v_by_group[2], x, name, sep = "."))
+    }) %>%
+      bind_rows() %>%
+      bind_rows(flx_total) %>%
+      pivot_wider(id_cols = v_tar, names_from = "col_name", values_from = "value", 
+                  names_repair = "minimal") %>%
+      flextable() %>%
+      span_header(sep = "\\.") %>%
+      vline(j = seq(from = 1, to = length(.$body$col_keys), 
+                    by = var_sub_width), part = "all") %>%
+      border_outer()
+  }
+  return(flx_output)
+}
+
+#####---- Helper functions
+
+OSMB_tex <- function(outloc, rep_name, rep_dt, edition_notice = "", executive_summary = "", OSMB=F, section_titles=data.frame(section=as.numeric()), n_runs=2) {
+  rep_dt_chr1 <- format(rep_dt, '%B %d, %Y')
+  rep_dt_chr2 <- format(rep_dt, '%Y %B')
+  title_page <- paste0("\\documentclass[fontsize=10pt]{article}
+
+\\usepackage[T1]{fontenc}
+\\usepackage[usenames,dvipsnames,table]{xcolor}
+\\usepackage{graphicx}
+\\usepackage{lastpage}
+\\usepackage{hyphenat}
+\\usepackage{import}
+\\usepackage{multirow}
+\\usepackage{tabularray}
+\\usepackage{chngcntr}
+\\usepackage{titlesec}
+\\usepackage{fancyvrb,cprotect}
+\\renewcommand{\\sfdefault}{ppl} % Palatino
+\\fontfamily{ppl}
+\\newcommand{\\rowstyle}[1]{\\gdef\\currentrowstyle{#1}%
+  #1\\ignorespaces
+}
+
+\\usepackage{array,amsmath}
+\\usepackage{ragged2e}
+
+\\usepackage{enumitem}
+\\usepackage{flafter}
+
+\\setlength\\tabcolsep{0pt}
+\\setlength\\tabcolsep{0pt}
+\\def\\arraystretch{1.5}
+
+\\setlength\\parindent{0pt}
+\\setlength{\\parskip}{1ex}
+
+\\usepackage[margin=.5in, tmargin=.75in]{geometry}
+\\usepackage{fancyhdr}
+
+\\usepackage[hidelinks]{hyperref}
+
+\\definecolor{gray_z}{HTML}{EFEFF3}
+
+\\UseTblrLibrary{amsmath,booktabs}
+
+\\lhead{CONFIDENTIAL}
+\\rhead{\\footnotesize ", rep_name, "}
+         
+\\cfoot{Page \\thepage\\ of \\pageref{LastPage}}
+\\lfoot{\\footnotesize \\today}
+\\rfoot{\\footnotesize Prepared by RECOVER DRC}
+\\pagestyle{fancy}  
+
+\\setcounter{section}{1}
+
+
+
+\\DefTblrTemplate{conthead-text}{wide}{ (Continued)}
+\\SetTblrTemplate{conthead-text}{wide}%
+
+\\DefTblrTemplate{head}{wide}{%
+  \\makebox[\\hsize][c]{%
+    \\parbox{\\textwidth}{%
+    
+      \\centering
+      \\UseTblrTemplate {caption-tag}{default}%
+      \\UseTblrTemplate {caption-sep}{default}%
+      \\UseTblrTemplate {caption-text}{default}%
+    }
+  }
+}
+
+\\DefTblrTemplate{contfoot-text}{wide}{Continued on next page}
+\\SetTblrTemplate{contfoot-text}{wide}
+
+\\DefTblrTemplate{note}{wide}{%
+  \\makebox[\\hsize][c]{%
+    \\parbox{\\textwidth}{%
+      \\setlength{\\parindent}{0pt}
+      \\MapTblrNotes{
+         \\noindent
+         \\UseTblrTemplate{note-tag}{default}
+         \\UseTblrTemplate{note-sep}{default}
+         \\UseTblrTemplate{note-text}{default}
+         \\par
+         }
+    }
+  }
+}
+
+
+\\NewTblrTheme{drctab}{
+ \\SetTblrTemplate{head}{wide}%
+ \\SetTblrTemplate{note}{wide}%
+ \\SetTblrStyle{caption-tag}{font=\\bfseries\\normalsize}
+ \\SetTblrStyle{caption-text}{font=\\normalsize}
+ \\SetTblrStyle{foot}{font=\\footnotesize} 
+
+}
+
+
+\\begin{document}
+
+
+
+
+
+
+\\titleformat{\\section}
+{\\color{CadetBlue}}{\\thesection}{1em}{}
+
+\\titleformat{\\subsection}
+{\\color{CadetBlue}}{\\thesubsection}{1em}{}
+
+\\begin{titlepage}
+
+\\centering
+\\vspace*{\\baselineskip}
+{\\large{\\bf RECOVER}  \\\\[0.5\\baselineskip] 
+  {\\bf OBSERVATIONAL STUDY MONITORING BOARD} \\\\[0.5\\baselineskip]
+  {\\bf ", rep_dt_chr2, " REPORT}\\\\[2\\baselineskip] on the 
+  {\\bf ", str_replace(rep_name, "OSMB", "Cohort"), "} } \\\\[6\\baselineskip] 
+{\\large ", rep_dt_chr1, "}
+\\vspace*{2\\baselineskip} \\\\
+
+\\vspace{2.5in}
+
+Prepared by: \\\\[\\baselineskip]
+{\\large RECOVER Data Resource Core\\par}
+\\vspace*{1\\baselineskip}
+{ \\emph{MGH Biostatistics, Boston, MA} \\par}
+
+
+\\vfill
+\\includegraphics[scale=.8]{resources/MGH_logo.png} \\hspace{1.25in}
+\\includegraphics[scale=.2]{resources/Harvard_logo.jpg}
+\\end{titlepage}")
+  
+  tex_files_all <- list.files(path = paste0(outloc, "/tables/"),
+                              pattern = "^s[0-9][0-9][0-9]o[0-9][0-9][0-9].+.tex$", 
+                              full.names = TRUE, 
+                              recursive = FALSE)
+  ex_tabs <- list.files(path = paste0(outloc, "/tables/"),
+                        pattern = "^s000o[0-9][0-9][0-9].+.tex$", 
+                        full.names = TRUE, 
+                        recursive = FALSE)
+  
+  # Remove execute summary tables
+  
+  tex_files <- setdiff(tex_files_all, ex_tabs)
+  
+  
+  figure_files <- list.files(path = paste0(outloc, "/figures/"),
+                             pattern = "^s[0-9][0-9][0-9]o[0-9][0-9][0-9].+.png$|*.jpg$",
+                             full.names = TRUE,
+                             recursive = F)
+  
+  all_files <- c(tex_files, figure_files)
+  all_files <- all_files[order(gsub("figures|tables", "", all_files))]
+  
+  table_latex <- function(fl){
+    
+    print(fl)
+    
+    table_name <- fl 
+    tmp_split <- unlist(strsplit(fl, "/"))
+    file_str <- tmp_split[length(tmp_split)]
+    
+    footer_fl <- gsub("tables/", "footers/", gsub(".tex$", "_footer.tex", fl))
+    footer_txt = latex_escape_fxn(paste(readLines(footer_fl), collapse="\n"))
+    
+    # tmp_remove_sec <- unlist(strsplit(file_str, "(?<=[a-zA-Z])\\s*(?=[0-9])", perl = T))
+    # filename_clean <- latex_escape_fxn(tools::file_path_sans_ext(gsub("[[:digit:]]+", "", tmp_remove_sec)[3]))
+    file_str_list <- str_split(file_str, "_")[[1]]
+    file_ref <- file_str_list[1]
+    filename_clean = gsub(".tex$", "",  file_str_list[2])
+    
+    paste0("
+           
+  \\footnotesize
+  \\SetTblrInner{rowsep=4pt}
+  \\import{tables/}{",
+           gsub(".+/tables/", "", fl),
+           "}
+  \\normalsize
+  \\clearpage"
+    )
+  }
+  figure_latex <- function(fl){
+    table_name <- fl 
+    tmp_split <- unlist(strsplit(fl, "/"))
+    file_str <- tmp_split[length(tmp_split)]
+    # tmp_remove_sec <- unlist(strsplit(file_str, "(?<=[a-zA-Z])\\s*(?=[0-9])", perl = T))
+    # filename_clean <- latex_escape_fxn(tools::file_path_sans_ext(gsub("[[:digit:]]+", "", tmp_remove_sec)[3]))
+    file_str_list <- str_split(file_str, "_")[[1]]
+    file_ref <- file_str_list[1]
+    filename_clean = gsub("....$", "",  file_str_list[2])
+    paste0("\\begin{figure}[h]
+           \\centering
+  \\caption{",
+           filename_clean,
+           "}
+  \\label{fig:",
+           file_ref,
+           "}
+  \\includegraphics[width=0.8\\textwidth,height=0.8\\textheight,keepaspectratio]{",
+           gsub(".+/figures/", "figures/", fl),
+           "}
+  \\end{figure}
+  \\clearpage"
+    )
+  }
+  
+  section = 0
+  files_list <- list()
+  for(output_fl in all_files){
+    
+    section_new = as.numeric(gsub(".+/s([0-9]+)o..._.+", "\\1", output_fl))
+    object_out <- if(grepl("/tables/", output_fl)) {
+      table_latex(output_fl)
+    } else if(grepl("/figures/", output_fl)){
+      figure_latex(output_fl)
+    } 
+    if(section_new == section) {
+      files_list <- c(files_list, list(object_out))
+    } else {
+      if(!section_new %in% section_titles$section) {
+        st_label = paste("Section", section_new)
+      } else {
+        st_label <- section_titles$section_title[section_titles$section == section_new]
+      }
+      
+      st = paste0(ifelse(grepl("appendi", st_label, ignore.case = T), "\\counterwithin{table}{section}\\renewcommand{\\thetable}{A\\arabic{table}}", ""),
+                  "\\centerline{\\bf ", st_label, "}\n", 
+                  "\\setcounter{table}{0}",
+                  sep="\n")
+      section = section_new
+      files_list <- c(files_list, 
+                      list(paste0(st, 
+                                  object_out))) 
+    }
+  }
+  
+  end <- paste0()
+  
+  toc_txt <- "
+
+\\clearpage
+\\tableofcontents
+\\listoftables
+\\listoffigures
+\\clearpage
+  
+  "
+  if(executive_summary != ""){
+    executive_summary = glue("\\section*{Executive summary} \\addcontentsline{toc}{section}{Executive summary}
+                             
+                             **executive_summary**",
+                             .open="**", .close="**")
+  }
+  latex_fl <- paste(title_page, 
+                    toc_txt,
+                    edition_notice, 
+                    executive_summary, 
+                    paste(unlist(files_list), collapse="\n\n\n\n"), 
+                    "\\end{document}\n", sep="\n\n\n\n")
+  
+  writeLines(latex_fl, file.path(outloc, "main.tex"))
+  
+  rf_loc <- file.path(outloc, "resources")
+  dir.create(rf_loc)
+  file.copy(list.files(file.path(rep_rt_user, "latex_resources"), full.names = T),
+            rf_loc)
+  sty_files <- list.files(rf_loc, pattern=".sty")
+  
+  res_fl <- paste(unlist(lapply(gsub(".sty", "", sty_files), function(x) paste0("\\usepackage{", x, "}"))),
+                  collapse="\n")
+  writeLines(res_fl, file.path(rf_loc, "load_packages.tex"))
+  
+  writeLines(paste0("pdflatex main.tex\nrename main.pdf \"", rep_name, "_", format(Sys.time(), "%Y%m%d_%H%M"), ".pdf\"\nPAUSE"), file.path(outloc, "main.bat"))
+  
+  latex_runs <- paste(rep("\"/usr/local/texlive/2022/bin/x86_64-linux/pdflatex\" main.tex", max(n_runs, 2)), collapse="\n")
+  
+  writeLines(paste0(latex_runs, "\ncp main.pdf \"", rep_name, "_", format(Sys.time(), "%Y%m%d_%H%M"), ".pdf\"\nrm main.pdf"), file.path(outloc, "main.sh"))
+  system2("chmod", args = c("+x", file.path(outloc, 'main.sh')), wait=T)
+  
+  save_wd <- getwd()
+  setwd(outloc)
+  system2("./main.sh", wait = T)
+  setwd(save_wd)
+  
+  
+  add_fls <- function(str){
+    all_fls <- list.files(file.path(outloc, str))
+    if(length(all_fls) == 0) return(NULL)
+    paste0(str, "/", all_fls)
+  }
+  
+  zip::zip(zipfile = glue("{rep_name}_latex_{rep_dt_chr1}.zip"), 
+           files = c("main.tex", "main.bat",
+                     add_fls("tables"),
+                     add_fls("tables_pres"),
+                     add_fls("figures"),
+                     add_fls("resources")),
+           root = outloc,
+           include_directories = TRUE)
+  return()
+  # zip up with files
+}
+
+# OSMB_tex("Y:/code_space/ws/auto_main/reports/adult_OSMB/20220617_0900",
+#          "REPORT 1", "2022-01-01")
+
+o_cntr_fxn <- function(type, nm, list=F, ext) {
+  t_fldr <- "tables"
+  p_fldr <- "tables_pres"
+  f_fldr <- "figures"
+  if(!"footers" %in% list.dirs(output_loc, full.names = F)) dir.create(file.path(output_loc, "footers"))
+  
+  if(!exists("o_cntr")) o_cntr <<- 1
+  if(!exists("p_cntr")) p_cntr <<- 1
+  if(type == "t") {
+    if(!t_fldr %in% list.dirs(output_loc, full.names = F)) dir.create(file.path(output_loc, t_fldr))
+  } else if(type == "f") {
+    if(!f_fldr %in% list.dirs(output_loc, full.names = F)) dir.create(file.path(output_loc, f_fldr))
+  } else {
+    if(!p_fldr %in% list.dirs(output_loc, full.names = F)) dir.create(file.path(output_loc, p_fldr))
+  }
+  str_cntr <- ifelse(type == "p", p_cntr, o_cntr)
+  str_code <- sprintf("s%03do%03d", s, str_cntr)
+  str_type = case_when(type == 't' ~ t_fldr,
+                       type == 'p' ~ p_fldr,
+                       T ~ f_fldr)
+  if(missing(ext)){
+    str_ext <- ifelse(type %in% c('p', 't'), 'tex', 'png')
+  } else {
+    str_ext <- ext
+  }
+  str_nm <- glue("{str_code}_{nm}.{str_ext}")
+  str_out <- glue("{output_loc}/{str_type}/{str_nm}")
+  
+  if(type == "p") {
+    p_cntr <<- p_cntr + 1
+  } else {
+    o_cntr <<- o_cntr + 1
+  }
+  
+  
+  cc_heading <- fp_text(color = "#4472c0",
+                        bold=T, 
+                        # font.family = "MV Boli",
+                        font.size = 16)
+  
+  format_cc_heading <- ftext(nm, cc_heading) %>% fpar()
+  
+  if(list) {
+    list(fl = str_out,
+         file_prefix = str_code,
+         file_nm = str_nm,
+         file_n = str_cntr,
+         docx_head= format_cc_heading) 
+  } else {
+    str_out
+  }
+}
+
+mk_latex_tb_ref <- function(o_cntr_obj) {
+  glue("{\\bf Table~\\ref{tab:**o_cntr_obj$file_prefix**}}", .open = "**", .close = "**")
+}
+
+mk_latex_fig_ref <- function(o_cntr_obj) {
+  glue("{\\bf Figure~\\ref{fig:**o_cntr_obj$file_prefix**}}", .open = "**", .close = "**")
+}
+
+mk_latex_tb_ins <- function(o_cntr_obj, pb = F) {
+  
+  glue("
+  **ifelse(pb, '\\\\pagebreak', '')**
+  \\footnotesize
+  \\SetTblrInner{rowsep=4pt}
+  \\import{tables/}{**o_cntr_obj$file_nm**}
+  
+  \\normalsize
+  \\bigskip
+  
+  ",
+       .open = "**", .close = "**")
+}
+
+## a similar function using a pivot
+
+## Note that categories cannot overlap. So if "unknown" is nested below "unknown" then it will break. try using explicit naming: "Sex Unknown"
+summ_tab_span = function(a, v_tar, v_by_group = NA, spanh1_only = T, missing_as = "Missing") {
+  
+  if(spanh1_only) {
+    ## this spanning structure looks weird
+    nm_sf <- paste(v_by_group[1], paste(rep("%s", length(v_by_group)), collapse="."), sep=".")
+  } else {
+    ## this spanning structure matches the request but sub spans needs self explanatory levels
+    nm_sf <- paste0(v_by_group, ".%s", collapse=".")
+  }
+  
+  v_splits = length(levels(a[[tail(v_by_group, 1)]]))
+  
+  add_trow <- function(ds){
+    trow <- ds %>% 
+      ungroup() %>% 
+      summarise(across(all_of(v_tar), ~ "Overall"),
+                across(-all_of(v_tar), sum))
+    bind_rows(ds, trow)
+  }
+  
+  tbl_table_process = a %>% 
+    select(all_of(c(v_tar, v_by_group))) %>% 
+    mutate(
+      temp1 := case_when(
+        !!sym(v_tar[ifelse(length(v_tar)>=2,2,1)]) %in% c(NA, "") ~ missing_as, 
+        T ~ as.character(!!sym(v_tar[ifelse(length(v_tar)>=2,2,1)]))
+      ), 
+      temp1_f = factor(
+        temp1, 
+        levels = unique(c(levels(!!sym(v_tar[ifelse(length(v_tar)>=2,2,1)])), missing_as))
+      ), 
+      !!sym(v_tar[ifelse(length(v_tar)>=2,2,1)]) := temp1_f
+    ) %>%
+    group_by(!!!syms(c(v_tar, v_by_group)), .drop = F) %>% 
+    summarise(n=n(),
+              .groups="drop") %>%
+    mutate(colnm = do.call("sprintf", list(nm_sf, !!!syms(v_by_group)))) %>% 
+    select(-all_of(v_by_group)) %>% 
+    pivot_wider(names_from = colnm,
+                values_from = n,
+                names_sep=".") %>% 
+    mutate(across(-all_of(v_tar), replace_na, 0)) %>% 
+    add_trow() %>% 
+    mutate(Overall = rowSums(across(-all_of(v_tar)))) 
+  
+  v_hline = grep(levels(a[[tail(v_tar,1)]])[1], tbl_table_process[[v_tar[length(v_tar)]]])
+  
+  if (length(v_hline) > 1) {
+    v_hline = v_hline - 1
+    v_hline = v_hline[-1]
+    v_hline = c(v_hline, (nrow(tbl_table_process) - 1))
+  } else {
+    v_hline = nrow(tbl_table_process) - 1
+  }
+  
+  flx_output = tbl_table_process %>%
+    as_flextable() %>% 
+    span_header() %>%
+    vline(j = seq(from = ifelse(length(v_tar) == 1, 1, 2), to = length(.$body$col_keys), 
+                  by = v_splits), part = "all") %>%
+    merge_v(j = 1) %>%
+    merge_h_range(i = nrow(.$body$dataset), j1 = 1, j2 = ifelse(length(v_tar) == 1, 1, 2), 
+                  part = "body") %>%
+    hline(i = v_hline) %>%
+    border_outer() %>% 
+    align(align="center", part="all")
+  return(flx_output)
+}
+
+### takes a summ_tab object and converts the percentages to row percentages -- useful for certain outputs
+# input summ_tab object (st) and names of cols to convert
+## WARNING: right now this only works if all variables are categorical (no Mean values)
+
+summ_tab_row <- function(st, cols) {
+  st %>%
+    mutate(across(all_of(c(cols, "Overall")), ~ as.numeric(gsub( " .*$", "", .x)))) %>%
+    mutate(across(all_of(cols), ~ paste0(.x, " (", round(.x/Overall*100, 0), "%)")))
+}
+
 
 
 
