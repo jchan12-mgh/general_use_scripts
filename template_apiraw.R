@@ -51,7 +51,7 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 
 
 cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
-data_rc_project <- get_rc_formdata(token_precise, "precise", urlapi) # here we delted url = 
+data_rc_project <- get_rc_formdata(token_precise, "precise", urlapi) 
 
 cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
 closeAllConnections()
