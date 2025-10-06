@@ -594,17 +594,23 @@ ddprep_fxn <- function(dd, repeat_instr, cohort_nm, in_em = ds_em, sq_r=data.fra
   ### pick up embedded vars from field_label and their branching logic
   embedded_vars <- dd %>% filter(field_type == "descriptive" & str_detect(field_label, "\\{")  & !is.na(branching_logic))
   
-  ### extract each embedded vars
-  embedded_vars_all <- str_extract_all(embedded_vars$field_label, "\\{(\\w+)")
-  
-  emb <- lapply(1:length(embedded_vars_all), function(i){
-    if(length(embedded_vars_all[[i]]) == 0) return(NULL)
-    embedded_vars[rep(i, length(embedded_vars_all[[i]])), ] %>% 
-      select(branching_logic_from_ET = branching_logic) %>% 
-      mutate(field_name = gsub("^\\{", "", embedded_vars_all[[i]]))
-  }) %>% 
-    bind_rows()
-  ### mapping with their branching logic from descriptive type
+  if (nrow(embedded_vars) > 0) {
+    ### extract each embedded vars
+    embedded_vars_all <- str_extract_all(embedded_vars$field_label, "\\{(\\w+)")
+    
+    emb <- lapply(1:length(embedded_vars_all), function(i){
+      if(length(embedded_vars_all[[i]]) == 0) return(NULL)
+      embedded_vars[rep(i, length(embedded_vars_all[[i]])), ] %>% 
+        select(branching_logic_from_ET = branching_logic) %>% 
+        mutate(field_name = gsub("^\\{", "", embedded_vars_all[[i]]))
+    }) %>% 
+      bind_rows()
+    ### mapping with their branching logic from descriptive type
+  } else {
+    emb <- data.frame(field_name = as.character(), 
+                      branching_logic_from_ET = as.character())
+    
+  }
   
   ### compare with ds_dd$branching_logic
   ## dd[ dd$field_name %in% emb$field_name, c('field_name','branching_logic')] %>% View()
@@ -1696,10 +1702,10 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   write.csv(meta_list$res_repeatforms, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_repeatforms_{today_tm}.csv"), row.names=F)
   
   formData_xml <- list("token"=tk,
-                      content='project_xml',
-                      returnMetadataOnly='true',
-                      format = "xml",
-                      returnFormat = "xml")
+                       content='project_xml',
+                       returnMetadataOnly='true',
+                       format = "xml",
+                       returnFormat = "xml")
   
   response_xml <- httr::POST(urlapi, body = formData_xml, encode="form")
   result_xml <- content(response_xml)
@@ -1833,7 +1839,7 @@ complete_cfxn <- function(ddv = dd_list[["dd_val"]]) {
 }
 
 # check for out of range values
-val_cfxn <- function(ddv) {
+val_cfxn <- function(ddv, today_dt) {
   ddv %>% 
     filter(!na_or_blank(text_validation_min) | !na_or_blank(text_validation_max)) %>% 
     mutate(
@@ -1844,7 +1850,7 @@ val_cfxn <- function(ddv) {
         T ~ glue("as.numeric({field_name}) < as.numeric('{text_validation_min}')")
       ),
       val_txt_hi = case_when(
-        text_validation_max %in% c("today", "[clab_datemax]") ~ glue("as.Date({field_name}) > as.Date('{rt_date_dt}')"), 
+        text_validation_max %in% c("today", "[clab_datemax]") ~ glue("as.Date({field_name}) > as.Date('{today_dt}')"), 
         text_validation_max == "now" ~ glue("ymd_hm({field_name}) > Sys.time()"), 
         text_validation_type_or_show_slider_number == "date_mdy" & str_detect(text_validation_max, "\\[")  ~ glue("as.Date({field_name}) > as.Date({text_validation_max})") %>% convert_branching_logic(), ## if variable, remove square bracket
         text_validation_type_or_show_slider_number == "date_mdy" ~ glue("as.Date({field_name}) > as.Date('{text_validation_max}')"),
@@ -1863,7 +1869,7 @@ val_cfxn <- function(ddv) {
       )) %>% 
     select(form = form_name, vr= field_name, val_txt, qry_txt, qrycond_txt) %>%
     mutate(check = "range_check",
-           across(val_txt, \(x) gsub("\\(today\\)", "(rt_date_dt)", x)))
+           across(val_txt, \(x) gsub("\\(today\\)", "(today_dt)", x)))
 }
 
 # for each row in all_dd_chks, evaluate val_txt on ds_fdata

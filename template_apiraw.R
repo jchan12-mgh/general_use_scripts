@@ -1,24 +1,26 @@
 top_dir <- system("git rev-parse --show-toplevel", intern = T, ignore.stderr = T)
+
 if(length(top_dir) == 0) top_dir = "."
 setwd(top_dir)
 
 
 source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/heads/main/helper_fxns.R")
 # How is a secure private location managed for tokens?
-source("~/load_all_tokens.R")
+# source("~/load_all_tokens.R") # should this path be changed to just ./ not ~/
+source("./load_all_tokens.R")
+
 
 # Required directory structure
-# rt is the project folder
-# rt has DM_src, DM, and codespace folders
+# project_location is the project folder
 
-rt <- "/home/shared/dcc_test/peds_comb" # "path_to_root" # 
+project_location <- "C:/Users/wbonaventura/Desktop/PRECISE" # "path_to_root" # 
 # Strings in here will become the folder name for that project
-all_projects <- c("cong")
+all_redcaps <- c("precise")
 
 
 # api url should end in api/
 
-urlapi <- "https://recover-redcap.partners.org/api/" # "https://redcap.partners.org/redcap/api/" # 
+urlapi <- "https://redcap.partners.org/redcap/api/" # "https://redcap.partners.org/redcap/api/" # 
 
 today_tm <- paste(format(Sys.Date(), "%Y-%m-%d"), format(Sys.time(),"%H_%M"), sep="_")
 today <- format(Sys.Date(), "%Y-%m-%d")
@@ -36,8 +38,8 @@ start_sink(append=F)
 
 loc_list <- list()
 
-for(proj in all_projects){ 
-  loc_list[[proj]] <- get_loc(rt, proj)
+for(proj in all_redcaps){ 
+  loc_list[[proj]] <- get_loc(project_location, proj)
 }
 
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
@@ -49,7 +51,7 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 
 
 cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
-data_rc_project <- get_rc_formdata(token_cong, "cong", url = urlapi)
+data_rc_project <- get_rc_formdata(token_precise, "precise", urlapi) # here we delted url = 
 
 cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
 closeAllConnections()
