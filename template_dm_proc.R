@@ -5,16 +5,14 @@ setwd(top_dir)
 
 source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/heads/main/helper_fxns.R")
 
-
-# Required directory structure
-# project_name is the project folder
+source(".globalvars.R")
 
 redcap_name = "precise" # redcap_name = "redcap_name"
 enr_form_nm = "consent"
 ## Survey queue and form display logic currently need to be downloaded manually and placed in higher level folder. 
 ## Name of files needed for search until API operational
 
-project_location <- "C:/Users/wbonaventura/Desktop/PRECISE" # project_location <- "path_to_root"
+project_location <- "{dropbox_loc}/PRECISE" # project_location <- "path_to_root"
 
 dm_src_loc <- file.path(project_location, redcap_name, "DM_src")
 
@@ -22,14 +20,12 @@ bargs_mkrenv <- getArgs(defaults = list(dt = NA, pf=NA, log=0))
 
 today <- format(Sys.Date(), "%Y%m%d")
 
-cat(glue("------------------- project_name.R log file - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
-
 # This should work if you have the repository in the folder with your initials in the ws directory
 
-max_fl_dt <- function(dir) max(as.numeric(list.files(dm_src_loc)), na.rm=T)
+max_fl_dt <- function(dir) max(as.numeric(list.files(dir)), na.rm=T)
 
 if(is.na(bargs_mkrenv$dt)){
-  project_location_date <- max_fl_dt(rc_sites_dir)
+  project_location_date <-max_fl_dt(dm_src_loc)
 } else {
   project_location_date <- bargs_mkrenv$dt
 }
@@ -48,7 +44,7 @@ dir.create(dm_loc, recursive = "T")
 dm_src_loc <- file.path(dm_src_loc, project_location_date)
 
 if(bargs_mkrenv$log == 1) {
-  log_loc <- file.path(dm_loc, "project_name.log")
+  log_loc <- glue("{dm_loc}/{redcap_name}.log")
   cat(glue("-------- for run info check log file at {log_loc} ----- \n\n"))
   sf <- file(log_loc, open = "wt")
   sink(sf, split = T)
@@ -98,7 +94,7 @@ afmts_list <- fmt_gen_fxn(ds_dd)
 
 repeat_instruments <- repeat_instr_fxn(ds_fdata)
 
-dd_list <- ddprep_fxn(ds_dd, repeat_instruments, cohort_nm = redcap_name)
+dd_list <- ddprep_fxn(ds_dd, repeat_instruments, cohort_nm = redcap_name, sq_r = ds_sq_r)
 
 query_optional_vrs <- c()
 

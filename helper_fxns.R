@@ -1712,16 +1712,42 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   xml_as_list <- xml2::as_list(result_xml)
   
-  meta_list$survey_queue <- lapply(xml_as_list$ODM$Study$GlobalVariables$SurveysQueueGroup, \(x) {
-    as_tibble(attributes(x))
-  }) %>% bind_rows()
+  sq_list <- tryCatch(xml_as_list$ODM$Study$GlobalVariables$SurveysQueueGroup, error=function(e) NULL)
+  fd_list <- tryCatch(xml_as_list$ODM$Study$GlobalVariables$FormDisplayLogicConditionsGroup, error=function(e) NULL)
   
-  meta_list$fd_logic <- lapply(xml_as_list$ODM$Study$GlobalVariables$FormDisplayLogicConditionsGroup, \(x) {
-    as_tibble(attributes(x))
-  }) %>% 
-    bind_rows() %>% 
-    separate_longer_delim(forms_events, ",") %>% 
-    separate_wider_delim(forms_events, ":", names=c("event_name", "form_name"))
+  meta_list$survey_queue <- if(length(sq_list) > 0){
+    lapply(sq_list, \(x) {
+      if(is.null(x)) stop("No survey queue found")
+      as_tibble(attributes(x))
+    }) %>% 
+      bind_rows()
+  } else {
+    print("No survey queue found, saving blank form")
+    data.frame(active = as.character(),
+               auto_start = as.character(),
+               condition_surveycomplete_survey_id = as.character(),
+               condition_surveycomplete_event_id = as.character(),
+               condition_andor = as.character(),
+               condition_logic = as.character(),
+               event_id = as.character(),
+               survey_id = as.character(), 
+               stringsAsFactors=FALSE) 
+  }
+  
+  meta_list$fd_logic <- if(length(fd_list) > 0){
+    lapply(fd_list, \(x) {
+      as_tibble(attributes(x))
+    }) %>% 
+      bind_rows() %>% 
+      separate_longer_delim(forms_events, ",") %>% 
+      separate_wider_delim(forms_events, ":", names=c("event_name", "form_name"))
+  } else {
+    print("No form display logic found, saving blank form")
+    data.frame(control_condition = as.character(),
+               event_name = as.character(),
+               form_name = as.character(), 
+               stringsAsFactors=FALSE) 
+  }
   
   write.csv(meta_list$survey_queue, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_surveyqueue_{today_tm}.csv"), row.names=F)
   write.csv(meta_list$fd_logic, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_formdisplaylogic_{today_tm}.csv"), row.names=F)

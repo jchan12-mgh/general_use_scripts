@@ -5,6 +5,9 @@ setwd(top_dir)
 
 source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/heads/main/helper_fxns.R")
 
+source(".tokens.R") # loaded if needed
+source(".globalvars.R")
+
 bargs_in <- getArgs(defaults = list(add_log = 0))
 
 today <- format(Sys.Date(), "%Y%m%d")
@@ -35,7 +38,8 @@ if(bargs_in$add_log %in% 1){
 ### Load data -----
 cat(glue("------------------- Loading Data - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
-precise_env_list <- get_env_list("C:/Users/wbonaventura/Desktop/PRECISE/precise")
+
+precise_env_list <- get_env_list(glue("{dropbox_loc}/PRECISE/precise"))
 
 ds_dd <- precise_env_list$ds_dd()
 formds_list <- precise_env_list$formds_list()
