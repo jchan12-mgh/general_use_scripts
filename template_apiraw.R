@@ -1,20 +1,24 @@
 top_dir <- system("git rev-parse --show-toplevel", intern = T, ignore.stderr = T)
-
 if(length(top_dir) == 0) top_dir = "."
 setwd(top_dir)
 
 
 source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/heads/main/helper_fxns.R")
-# How is a secure private location managed for tokens?
-# source("~/load_all_tokens.R") # should this path be changed to just ./ not ~/
-source("./load_all_tokens.R")
+#' Each user's report should include two setup files
+#' .tokens.R contains all of the users tokens. This shouldn't be loaded unless needed
+#' .globalvars.R contains global variables that help identify a user: dropbox_loc, 
+#' Both of these files need to be in the gitignore
+
+source(".tokens.R")
+source(".globalvars.R")
 
 
-# Required directory structure
+
 # project_location is the project folder
+# all_redcaps are all of the redcaps associated with the project that should be loaded here
 
-project_location <- "C:/Users/wbonaventura/Desktop/PRECISE" # "path_to_root" # 
-# Strings in here will become the folder name for that project
+project_location <- glue("{dropbox_loc}/PRECISE") # "path_to_root" # 
+
 all_redcaps <- c("precise")
 
 
@@ -54,6 +58,7 @@ cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')
 data_rc_project <- get_rc_formdata(token_precise, "precise", urlapi) 
 
 cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
+
 closeAllConnections()
 
 
