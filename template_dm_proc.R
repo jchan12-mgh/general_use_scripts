@@ -74,6 +74,7 @@ all_rfiles <- list.files(all_rfiles_loc)
 all_rfile_stems <- unique(sub(".*DATA_(.+)_\\d{4}-\\d{2}-\\d{2}_\\d{2}_\\d{2}\\..*", "\\1", all_rfiles))
 
 fdata_list <- nlapply(all_rfile_stems, \(x) form_read_fxn(x, all_rfiles, all_rfiles_loc, ds_dd))
+# formds_list functions will break if this is named anything other than formds_list
 formds_list <- lapply(fdata_list, "[[", "ds")
 all_num_char_conv_issues <- bind_rows(lapply(fdata_list, "[[", "nc_issues"))
 rm(fdata_list)
