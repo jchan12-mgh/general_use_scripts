@@ -139,8 +139,8 @@ get_env_list <- function(proj_loc, dt){
   })
   
   names(out_list) <- gsub("\\.rds$|\\.qs2$", "", all_rds)
-  fds_lists_srch <- grep("_list.+_rdsfxnobjhlpr\\.", all_rds, value=T)
-  fds_lists <- paste0(unique(gsub("_list_.+", "", fds_lists_srch)), "_list")
+  fds_lists_srch <- grep("_rdsfxnobjhlpr", all_rds, value=T)
+  fds_lists <- unique(gsub("(^form.._list)_.+", "\\1", fds_lists_srch))
   if(length(fds_lists_srch) == 0){
     warning("no formds_list files were found")
     warning(glue("env_list has {length(out_list)} elements"))
@@ -150,12 +150,10 @@ get_env_list <- function(proj_loc, dt){
         local_dir <- env_loc
         
         fds_ds <- data.frame(full = list.files(local_dir, pattern = paste0(fds_list, "_.+_rdsfxnobjhlpr\\..+"))) %>% 
-          mutate(obj = gsub(".+_list_|_rdsfxnobjhlpr.+", "", full)) %>% 
+          mutate(obj = gsub("^form.._list_|_rdsfxnobjhlpr.+", "", full)) %>% 
           mutate(type = ifelse(grepl("\\.rds$", full), "rds", "qs2"))
         
         if(any(duplicated(fds_ds$full))) stop("Why are there duplicated form names in REDCap?")
-        
-        fds_nm <- gsub("_list_.+", "_list", fds_ds$full[1])
         
         fxn_block <- "
         fms <- unlist(as.list(environment()))
