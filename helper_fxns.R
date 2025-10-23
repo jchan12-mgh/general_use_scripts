@@ -1587,7 +1587,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   pid <- meta_list$proj$pid
   
   fl_prefix = glue("{toupper(loc_head)}_PID{pid}")
-  
+
   write.csv(meta_list$result_dd, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_DataDictionary_{today_tm}.csv"), row.names=F)
   dt_list_full <- unique(dd_form_vrs$form_name)
   
@@ -1598,7 +1598,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   form_list <- nlapply(dt_list_full, \(x) {
     form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi)
     form_ds <- form_ds_raw %>% 
-      mutate(cnt_nan = rowSums(!is.na(pick(-all_of(kys))))) %>% 
+      mutate(cnt_nan = rowSums(!is.na(pick(-any_of(kys))))) %>% 
       filter(cnt_nan > 0) %>% 
       select(-cnt_nan) 
     

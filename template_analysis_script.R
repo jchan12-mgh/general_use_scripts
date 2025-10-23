@@ -39,10 +39,10 @@ if(bargs_in$add_log %in% 1){
 cat(glue("------------------- Loading Data - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
 
-precise_env_list <- get_env_list(glue("{dropbox_loc}/PRECISE/precise"))
+sig_env_list <- get_env_list(glue("{dropbox_loc}/project_name/sig"))
 
-ds_dd <- precise_env_list$ds_dd()
-formds_list <- precise_env_list$formds_list()
+ds_dd_sg <- sig_env_list$ds_dd_sg()
+formsg_list <- sig_env_list$formsg_list()
 
 
 

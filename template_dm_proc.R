@@ -7,30 +7,12 @@ source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/h
 
 source(".globalvars.R")
 
-redcap_name = "precise" # redcap_name = "redcap_name"
-enr_form_nm = "consent"
-## Survey queue and form display logic currently need to be downloaded manually and placed in higher level folder. 
-## Name of files needed for search until API operational
-
-project_location <- "{dropbox_loc}/PRECISE" # project_location <- "path_to_root"
-
-dm_src_loc <- file.path(project_location, redcap_name, "DM_src")
-
 bargs_mkrenv <- getArgs(defaults = list(dt = NA, pf=NA, log=0))
 
+src_locs <- c(sg = glue("{dropbox_loc}/project_name/sig"),
+              c1 = glue("{dropbox_loc}/project_name/csrp_cons"))
+
 today <- format(Sys.Date(), "%Y%m%d")
-
-# This should work if you have the repository in the folder with your initials in the ws directory
-
-max_fl_dt <- function(dir) max(as.numeric(list.files(dir)), na.rm=T)
-
-if(is.na(bargs_mkrenv$dt)){
-  project_location_date <-max_fl_dt(dm_src_loc)
-} else {
-  project_location_date <- bargs_mkrenv$dt
-}
-
-project_location_date_dt <- ymd(project_location_date)
 
 if(is.na(bargs_mkrenv$pf)) {
   dir_pf = ""
@@ -38,13 +20,36 @@ if(is.na(bargs_mkrenv$pf)) {
   dir_pf = bargs_mkrenv$pf
 }
 
+rc_name1 <- sub(".*/([^/]+)/*$", "\\1", src_locs[1])
 
-dm_loc <- file.path(project_location, redcap_name, "DM", paste0(project_location_date, dir_pf))
+## Survey queue and form display logic currently need to be downloaded manually and placed in higher level folder. 
+## Name of files needed for search until API operational
+
+dm_src_loc1 <- file.path(src_locs[1], "DM_src")
+
+# This should work if you have the repository in the folder with your initials in the ws directory
+
+max_fl_dt <- function(dir) max(as.numeric(list.files(dir)), na.rm=T)
+
+if(is.na(bargs_mkrenv$dt)){
+  project_location_date <- max_fl_dt(dm_src_loc1)
+} else {
+  project_location_date <- bargs_mkrenv$dt
+}
+
+project_location_date_dt <- ymd(project_location_date)
+
+dm_loc <- file.path(src_locs[1], "DM", paste0(project_location_date, dir_pf))
 dir.create(dm_loc, recursive = "T")
-dm_src_loc <- file.path(dm_src_loc, project_location_date)
+
+writeLines(glue("Source Data Date = {project_location_date}"), file.path(dm_loc, glue("src_dt_{project_location_date}")))
+
+# keys for future joins
+kys <- c("record_id", "redcap_event_name", "redcap_repeat_instrument", "redcap_repeat_instance")
+
 
 if(bargs_mkrenv$log == 1) {
-  log_loc <- glue("{dm_loc}/{redcap_name}.log")
+  log_loc <- glue("{dm_loc}/{rc_name1}.log")
   cat(glue("-------- for run info check log file at {log_loc} ----- \n\n"))
   sf <- file(log_loc, open = "wt")
   sink(sf, split = T)
@@ -52,52 +57,77 @@ if(bargs_mkrenv$log == 1) {
 }
 
 
-writeLines(glue("Source Data Date = {project_location_date}"), file.path(dm_loc, glue("src_dt_{project_location_date}")))
+proc_src <- function(loc, two_char_desc=""){
 
+  out_list <- list()
+  
+  out_list$rc_namexx =  sub(".*/([^/]+)/*$", "\\1", loc)
+  
+  out_list$dm_src_locxx <- file.path(loc, "DM_src", project_location_date)
+  
+  cat(glue("------------------- working with data from {loc} ------------------- \n\n"))
+  
+  out_list$ds_ddxx <- get_folder_fxn(out_list$dm_src_locxx, "_DataDictionary_", read=T)
+  
+  out_list$ds_uaxx <- get_folder_fxn(out_list$dm_src_locxx, "_userassigns_", read=T)
+  out_list$ds_dgxx <- get_folder_fxn(out_list$dm_src_locxx, "_dagassigns_", read=T)
+  out_list$ds_emxx <- get_folder_fxn(out_list$dm_src_locxx, "_eventmap_", read=T)
+  out_list$ds_eixx <- get_folder_fxn(out_list$dm_src_locxx, "_eventidmap_", read=T)
+  out_list$ds_sqxx <- get_folder_fxn(out_list$dm_src_locxx, "_surveyqueue_", read=T)
+  out_list$ds_fdxx <- get_folder_fxn(out_list$dm_src_locxx, "_formdisplaylogic_", read=T)
+  #=========================== Global functions =================================
+  all_rfiles_loc <- file.path(out_list$dm_src_locxx, "all_rfiles")
+  all_rfiles <- list.files(all_rfiles_loc)
+  all_rfile_stems <- unique(sub(".*DATA_(.+)_\\d{4}-\\d{2}-\\d{2}_\\d{2}_\\d{2}\\..*", "\\1", all_rfiles))
+  
+  fdata_list <- nlapply(all_rfile_stems, \(x) form_read_fxn(x, all_rfiles, all_rfiles_loc, out_list$ds_ddxx))
+  # formds_list functions will break if this is named anything other than formds_list
+  out_list$formzz_list <- lapply(fdata_list, "[[", "ds")
+  out_list$all_num_char_conv_issuesxx <- bind_rows(lapply(fdata_list, "[[", "nc_issues"))
+  
+  cat(glue("------------------- joining files - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
+ 
+  out_list$ds_fdataxx <- Reduce(function(x, y) {
+    
+    collapse::join(x %>% select(-any_of('form')), y %>% select(-any_of('form')), how="full", on = intersect(intersect(names(x), names(y)), kys), overid=2)
+  }, out_list$formzz_list)
+  
+  out_list$ds_sq_rxx <- bind_rows(out_list$ds_sqxx %>% 
+                         mutate(FD=0), 
+                       out_list$ds_fdxx %>% 
+                         rename(condition_logic=control_condition) %>% 
+                         mutate(FD = 1)) %>% 
+    get_sqrlogic()
+  
+  afmts_list <- fmt_gen_fxn(out_list$ds_ddxx)
+  
+  repeat_instruments <- if("redcap_repeat_instrument" %in% names(out_list$ds_fdataxx)){
+    repeat_instr_fxn(out_list$ds_fdataxx)
+  } else {
+    data.frame(redcap_repeat_instrument= as.character(), repeat_instr= as.character())
+  }
+  
+  out_list$dd_listxx <- ddprep_fxn(out_list$ds_ddxx, repeat_instruments, cohort_nm = out_list$rc_namexx, 
+                                   sq_r = out_list$ds_sq_rxx, in_em = out_list$ds_emxx)
+  
+  names(out_list) <- gsub("xx", paste0("_", two_char_desc), names(out_list))
+  if(two_char_desc == "") {
+    names(out_list) <- gsub("zz", "ds", names(out_list))
+  } else {
+    names(out_list) <- gsub("zz", two_char_desc, names(out_list))
+  }
+  
+  cat(glue("------------------- returning rc objects - {two_char_desc} - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
+  out_list
+}
 
-cat(glue("------------------- working with data from {project_location} ------------------- \n\n"))
+proc_status <- lapply(1:length(src_locs), \(i) {
+  rc_list <- proc_src(src_locs[i], names(src_locs)[i])
+  list2env(rc_list, envir = .GlobalEnv)
+  data.frame(rc=names(src_locs)[i], objs = length(rc_list))
+}) %>% bind_rows()
 
-ds_dd <- get_folder_fxn(dm_src_loc, "_DataDictionary_", read=T)
-
-ds_ua <- get_folder_fxn(dm_src_loc, "_userassigns_", read=T)
-ds_dg <- get_folder_fxn(dm_src_loc, "_dagassigns_", read=T)
-ds_em <- get_folder_fxn(dm_src_loc, "_eventmap_", read=T)
-ds_ei <- get_folder_fxn(dm_src_loc, "_eventidmap_", read=T)
-ds_sq <- get_folder_fxn(dm_src_loc, "_surveyqueue_", read=T)
-ds_fd <- get_folder_fxn(dm_src_loc, "_formdisplaylogic_", read=T)
-
-# keys for future joins
-kys <- c("record_id", "redcap_event_name", "redcap_repeat_instrument", "redcap_repeat_instance")
-#=========================== Global functions =================================
-all_rfiles_loc <- file.path(dm_src_loc, "all_rfiles")
-all_rfiles <- list.files(all_rfiles_loc)
-all_rfile_stems <- unique(sub(".*DATA_(.+)_\\d{4}-\\d{2}-\\d{2}_\\d{2}_\\d{2}\\..*", "\\1", all_rfiles))
-
-fdata_list <- nlapply(all_rfile_stems, \(x) form_read_fxn(x, all_rfiles, all_rfiles_loc, ds_dd))
-# formds_list functions will break if this is named anything other than formds_list
-formds_list <- lapply(fdata_list, "[[", "ds")
-all_num_char_conv_issues <- bind_rows(lapply(fdata_list, "[[", "nc_issues"))
-rm(fdata_list)
-
-cat(glue("------------------- joining files - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
-ds_fdata <- Reduce(function(x, y) {
-  collapse::join(x %>% select(-any_of('form')), y %>% select(-any_of('form')), how="full", on = kys, overid=2)
-}, formds_list)
-
-ds_sq_r <- bind_rows(ds_sq %>% 
-                       mutate(FD=0), 
-                     ds_fd %>% 
-                       rename(condition_logic=control_condition) %>% 
-                       mutate(FD = 1)) %>% 
-  get_sqrlogic()
-
-afmts_list <- fmt_gen_fxn(ds_dd)
-
-repeat_instruments <- repeat_instr_fxn(ds_fdata)
-
-dd_list <- ddprep_fxn(ds_dd, repeat_instruments, cohort_nm = redcap_name, sq_r = ds_sq_r)
-
-query_optional_vrs <- c()
+query_optional_vrs_rc <- c()
 
 cat(glue("------------------- running expect_complete - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
@@ -105,21 +135,25 @@ cat(glue("------------------- running expect_complete - {format(Sys.time(), '%H:
 #' enrollment form has all variables joined on with enr_vis_ prefix
 #' full listing of these can be seen in the dd_prep function. Required additions can be seen in the failed logic from form_completeness generation
 
-ds_fdata_full <- ds_fdata %>% 
-  left_join(formds_list[[enr_form_nm]] %>% 
+# If query reports are needed across projects the code below would need to be duplicated
+
+enr_form_nm = "baseline_survey"
+
+ds_fdata_full <- ds_fdata_sg %>% 
+  left_join(formsg_list[[enr_form_nm]] %>% 
               rename_with(\(x) paste0("enr_vis_", x),
                           .cols=-all_of(kys)),
             by = join_by(record_id, redcap_event_name, redcap_repeat_instrument, redcap_repeat_instance))
 
 
-form_completeness <- dd_list$dd_val %>% 
+form_completeness <- dd_list_sg$dd_val %>% 
   filter(field_name %!in% c("record_id"),
          field_type %!in% c("calc"),
          !grepl("@HIDDEN|OLDCALC", field_annotation)) %>% 
   expect_complete_cfxn(ds = ds_fdata_full, cores_max = 5) %>%
-  filter(variable %!in% query_optional_vrs) 
+  filter(variable %!in% query_optional_vrs_rc) 
 
-val_chks <- val_cfxn(dd_list$dd_val, project_location_date_dt)
+val_chks <- val_cfxn(dd_list_sg$dd_val, project_location_date_dt)
 
 autodd_queries <- cq_fxn(val_chks, ds = ds_fdata_full, cores_max = 5, me=F)
 
@@ -139,7 +173,7 @@ save_info <- lapply(ls(), \(fl_str){
   print(glue('Saving file {fl_str} to qs2'))
   obj_save <- eval(parse(text=paste0("`", fl_str, "`")))
   
-  if(fl_str %in% c("formds_list", "formds_cg_list")) {
+  if(grepl("^form.._list$", fl_str)) {
     all_forms <- names(obj_save)
     lapply(all_forms, function(fm){
       qs_save(obj_save[[fm]], file.path(dm_loc, paste0(fl_str, "_", fm, "_rdsfxnobjhlpr", ".qs2")))

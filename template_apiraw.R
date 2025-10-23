@@ -4,6 +4,7 @@ setwd(top_dir)
 
 
 source("https://raw.githubusercontent.com/jchan12-mgh/general_use_scripts/refs/heads/main/helper_fxns.R")
+# source("helper_fxns.R")
 #' Each user's report should include two setup files
 #' .tokens.R contains all of the users tokens. This shouldn't be loaded unless needed
 #' .globalvars.R contains global variables that help identify a user: dropbox_loc, 
@@ -17,9 +18,10 @@ source(".globalvars.R")
 # project_location is the project folder
 # all_redcaps are all of the redcaps associated with the project that should be loaded here
 
-project_location <- glue("{dropbox_loc}/PRECISE") # "path_to_root" # 
+project_location <- glue("{dropbox_loc}/project_name") # "path_to_root" # 
 
-all_redcaps <- c("precise")
+all_redcaps <- c("sig" = token_pid44623,
+                 "csrp_cons" = token_pid48156)
 
 
 # api url should end in api/
@@ -42,7 +44,7 @@ start_sink(append=F)
 
 loc_list <- list()
 
-for(proj in all_redcaps){ 
+for(proj in names(all_redcaps)){ 
   loc_list[[proj]] <- get_loc(project_location, proj)
 }
 
@@ -54,10 +56,12 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 # api call should read in a single form and write out that single form
 
 
-cat(glue("------------------- starting rc_project - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
-data_rc_project <- get_rc_formdata(token_precise, "precise", urlapi) 
+for(i in 1:length(all_redcaps)){
+  cat(glue("------------------- starting {names(all_redcaps)[i]} - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
+  get_rc_formdata(all_redcaps[i], names(all_redcaps)[i], urlapi) 
+}
 
-cat(glue("------------------- Complete - {format(Sys.time(), '%H:%M')} ---------------------- \n\n"))
+
 
 closeAllConnections()
 
