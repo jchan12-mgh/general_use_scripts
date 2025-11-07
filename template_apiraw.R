@@ -1,3 +1,8 @@
+cat("\n\n------------------------------------------------",
+    "\n------------------------------------------------",
+    "\nStarting apiraw.R run ",
+    "\n------------------------------------------------ \n\n\n")
+
 top_dir <- system("git rev-parse --show-toplevel", intern = T, ignore.stderr = T)
 if(length(top_dir) == 0) top_dir = "."
 setwd(top_dir)
@@ -61,7 +66,7 @@ for(i in 1:length(all_redcaps)){
   get_rc_formdata(all_redcaps[i], names(all_redcaps)[i], urlapi) 
 }
 
-
+cat(glue("------- COMPLETE - {format(Sys.time(), '%H:%M')} ---------\n\n"))
 
 closeAllConnections()
 

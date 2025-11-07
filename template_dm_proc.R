@@ -1,3 +1,9 @@
+cat("\n\n------------------------------------------------",
+    "\n------------------------------------------------",
+    "\nStarting dm_proc.R run ",
+    "\n------------------------------------------------ \n\n\n")
+
+
 top_dir <- system("git rev-parse --show-toplevel", intern = T, ignore.stderr = T)
 if(length(top_dir) == 0) top_dir = "."
 setwd(top_dir)
@@ -200,6 +206,6 @@ save_info <- lapply(ls(), \(fl_str){
   print(glue('Complete {fl_str} qs2'))
 })
 
-print("Complete")
+cat(glue("------- COMPLETE - {format(Sys.time(), '%H:%M')} ---------\n\n"))
 
 closeAllConnections()
