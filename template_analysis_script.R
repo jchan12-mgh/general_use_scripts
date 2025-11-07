@@ -68,10 +68,10 @@ qs_docx <- read_docx() %>%  # read_docx(path = glue("{rep_rt_user}/../../../DM/s
 print(qs_docx, glue("{output_loc}/example_report_{today_tm}.docx"))
 
 
-print(glue("Complete and saved to {output_loc}"))
+print(glue("Complete and saved to {output_loc}\n\n"))
 
 ### closing log file -----
 
 closeAllConnections()
 
-print(glue("Complete and saved to {output_loc}"))
+print(glue("Complete and saved to {output_loc}\n\n"))
