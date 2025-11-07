@@ -139,8 +139,8 @@ get_env_list <- function(proj_loc, dt){
   })
   
   names(out_list) <- gsub("\\.rds$|\\.qs2$", "", all_rds)
-  fds_lists_srch <- grep("_rdsfxnobjhlpr", all_rds, value=T)
-  fds_lists <- unique(gsub("(^form.._list)_.+", "\\1", fds_lists_srch))
+  fds_lists_srch <- grep("_list.+_rdsfxnobjhlpr\\.", all_rds, value=T)
+  fds_lists <- paste0(unique(gsub("_list_.+", "", fds_lists_srch)), "_list")
   if(length(fds_lists_srch) == 0){
     warning("no formds_list files were found")
     warning(glue("env_list has {length(out_list)} elements"))
@@ -150,10 +150,12 @@ get_env_list <- function(proj_loc, dt){
         local_dir <- env_loc
         
         fds_ds <- data.frame(full = list.files(local_dir, pattern = paste0(fds_list, "_.+_rdsfxnobjhlpr\\..+"))) %>% 
-          mutate(obj = gsub("^form.._list_|_rdsfxnobjhlpr.+", "", full)) %>% 
+          mutate(obj = gsub(".+_list_|_rdsfxnobjhlpr.+", "", full)) %>% 
           mutate(type = ifelse(grepl("\\.rds$", full), "rds", "qs2"))
         
         if(any(duplicated(fds_ds$full))) stop("Why are there duplicated form names in REDCap?")
+        
+        fds_nm <- gsub("_list_.+", "_list", fds_ds$full[1])
         
         fxn_block <- "
         fms <- unlist(as.list(environment()))
@@ -410,19 +412,12 @@ datediff <- function(dt1, dt2, units = "d", ...){
 #' convert the REDCap branching_logic into an R-friendly string
 #' String searches generated as new scenarios rose up. Will need more steps with expanded use
 convert_branching_logic <- function(br) {
-  baseline_biosex_vrs <- c("[baseline_arm_.][biosex]",
-                           "[first-event-name][biosex]", 
-                           "[first-event-name][demo_cgbiosex]")
-  baseline_biosex_txt <- paste(gsub("\\]", "\\\\]", gsub("\\[", "\\\\[", baseline_biosex_vrs)), collapse = "|")
   
   br %>% 
-    str_replace_all(baseline_biosex_txt, "[base_biosex]") %>% 
     str_replace_all("\\((?=\\w)([^\\)]+)\\)\\]", "___\\1]") %>% 
-    str_replace_all("\\[previous-event-name\\]\\[visit_bonusoccured\\]", "[prev_visit_bonusoccured]") %>%  # handle the visit_bonusoccured variable logic %>% 
     str_replace_all("\\[previous-event-name\\]\\[visit_dt\\]", "[prev_visit_dt]") %>%  
     str_replace_all("\\[enrollment_arm_1\\]\\[([^\\]]+)\\]\\[first-instance\\]", "[enr_vis_fi_\\1]") %>%  
     str_replace_all("\\[enrollment_arm_1\\]\\[([^\\]]+)\\]\\[last-instance\\]", "[enr_vis_li_\\1]") %>%  
-    str_replace_all("\\[enrollment_arm_1\\]\\[([^\\]]+)\\]", "[enr_vis_\\1]") %>%
     str_replace_all("\\[arm-number\\]", "[arm_number]") %>%
     str_replace_all("(?<=[^-])event-name", "redcap_event_name") %>%
     str_replace_all(regex("(?<=\\s)and(?=\\s)", ignore_case = T), "&") %>%
@@ -438,53 +433,6 @@ convert_branching_logic <- function(br) {
   
 }
 
-
-# create form level branching logic
-add_form_branching <- function(dd, in_em, form) {
-  
-  # add instrument event mapping 
-  events <- in_em$unique_event_name[in_em$form == form]
-  
-  if(length(events) == 0) {
-    form_branching = "T"
-  } else{
-    form_branching <- if("vis_r" %in% names(in_em)) {
-      in_em$vis_r[in_em$form %in% form]
-    } else {
-      paste0("redcap_event_name %in% c('", paste(events, collapse = "', '") ,"')")
-    }
-  }
-  
-  # survey queue (so far just pregnancy and covid treatment)
-  if (str_detect(form, "pregnancy")){
-    sq <- glue("base_biosex %in% '1'")
-    
-    if (form == "pregnancy_followup"){
-      sq <- glue("{sq} & visit_preg_now_copy %in% '1'")
-    }
-    form_branching <- glue("({form_branching}) & ({sq})")
-    
-  } else if (form == "covid_treatment"){
-    sq <- "(redcap_event_name  %in%  'baseline_arm_1' & cat %in% c(1, 2)) | (str_detect(redcap_event_name, 'followup_') & newinf_yn %in% 1)"
-    form_branching <- glue("({form_branching}) & ({sq})")
-  }
-  
-  
-  # tier 2/3 tests: use test_*_elig variable
-  tests_vrs <- dd %>% 
-    filter(str_detect(branching_logic, "_elig") & str_detect(field_name, "_yn")) %>%
-    mutate(elig_vr = str_extract(branching_logic, "(?<=\\[)\\w+(?=\\])")) %>%
-    select(form_name, elig_vr)
-  
-  if (form %in% tests_vrs$form_name){
-    test_elig <- glue("{tests_vrs$elig_vr[tests_vrs$form_name %in% form]} %in% 1")
-    
-    form_branching <- glue("({form_branching}) & ({test_elig})")
-  }
-  
-  return(form_branching)
-  
-}
 
 
 #' returns a dataset with 1 columns: form name, and logic that determines if the entire form is shown or not
@@ -514,23 +462,6 @@ get_form_level_branching <- function(dd, in_em, sq_r=data.frame()) {
       } else {
         paste0("redcap_event_name %in% c('", paste(events, collapse = "', '") ,"')")
       }
-    }
-    # survey queue (so far just pregnancy and covid treatment)
-    if (str_detect(form, "pregnancy")){
-      sq <- glue("base_biosex %in% '1'")
-      
-      if (form %in% "pregnancy_followup"){
-        sq <- glue("{sq} & visit_preg_now_copy %in% '1'")
-      }
-      form_branching <- glue("({form_branching}) & ({sq})")
-      
-    } else if (form %in% "covid_treatment"){
-      sq <- "(redcap_event_name %in% 'baseline_arm_1' & cat %in% c(1, 2)) | (str_detect(redcap_event_name, 'followup_') & newinf_yn %in% 1)"
-      form_branching <- glue("({form_branching}) & ({sq})")
-    } else if (form %in% tests_vrs$form_name){
-      test_elig <- glue("{tests_vrs$elig_vr[tests_vrs$form_name %in% form]} %in% 1")
-      
-      form_branching <- glue("({form_branching}) & ({test_elig})")
     }
     
     if(nrow(sq_r) > 0){
@@ -1587,7 +1518,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   pid <- meta_list$proj$pid
   
   fl_prefix = glue("{toupper(loc_head)}_PID{pid}")
-
+  
   write.csv(meta_list$result_dd, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_DataDictionary_{today_tm}.csv"), row.names=F)
   dt_list_full <- unique(dd_form_vrs$form_name)
   
@@ -1598,7 +1529,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   form_list <- nlapply(dt_list_full, \(x) {
     form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi)
     form_ds <- form_ds_raw %>% 
-      mutate(cnt_nan = rowSums(!is.na(pick(-any_of(kys))))) %>% 
+      mutate(cnt_nan = rowSums(!is.na(pick(-all_of(kys))))) %>% 
       filter(cnt_nan > 0) %>% 
       select(-cnt_nan) 
     
@@ -1710,42 +1641,16 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   xml_as_list <- xml2::as_list(result_xml)
   
-  sq_list <- tryCatch(xml_as_list$ODM$Study$GlobalVariables$SurveysQueueGroup, error=function(e) NULL)
-  fd_list <- tryCatch(xml_as_list$ODM$Study$GlobalVariables$FormDisplayLogicConditionsGroup, error=function(e) NULL)
+  meta_list$survey_queue <- lapply(xml_as_list$ODM$Study$GlobalVariables$SurveysQueueGroup, \(x) {
+    as_tibble(attributes(x))
+  }) %>% bind_rows()
   
-  meta_list$survey_queue <- if(length(sq_list) > 0){
-    lapply(sq_list, \(x) {
-      if(is.null(x)) stop("No survey queue found")
-      as_tibble(attributes(x))
-    }) %>% 
-      bind_rows()
-  } else {
-    print("No survey queue found, saving blank form")
-    data.frame(active = as.character(),
-               auto_start = as.character(),
-               condition_surveycomplete_survey_id = as.character(),
-               condition_surveycomplete_event_id = as.character(),
-               condition_andor = as.character(),
-               condition_logic = as.character(),
-               event_id = as.character(),
-               survey_id = as.character(), 
-               stringsAsFactors=FALSE) 
-  }
-  
-  meta_list$fd_logic <- if(length(fd_list) > 0){
-    lapply(fd_list, \(x) {
-      as_tibble(attributes(x))
-    }) %>% 
-      bind_rows() %>% 
-      separate_longer_delim(forms_events, ",") %>% 
-      separate_wider_delim(forms_events, ":", names=c("event_name", "form_name"))
-  } else {
-    print("No form display logic found, saving blank form")
-    data.frame(control_condition = as.character(),
-               event_name = as.character(),
-               form_name = as.character(), 
-               stringsAsFactors=FALSE) 
-  }
+  meta_list$fd_logic <- lapply(xml_as_list$ODM$Study$GlobalVariables$FormDisplayLogicConditionsGroup, \(x) {
+    as_tibble(attributes(x))
+  }) %>% 
+    bind_rows() %>% 
+    separate_longer_delim(forms_events, ",") %>% 
+    separate_wider_delim(forms_events, ":", names=c("event_name", "form_name"))
   
   write.csv(meta_list$survey_queue, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_surveyqueue_{today_tm}.csv"), row.names=F)
   write.csv(meta_list$fd_logic, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_formdisplaylogic_{today_tm}.csv"), row.names=F)
@@ -1934,8 +1839,7 @@ cq_fxn <- function(exp_ds, ds = ds_fdata, cores_max = 5, me=T) {
     vt_expr <- all_exprs[[i]]
     multiselect <- !(all_dd_chks_rw$vr %in% names(ds))
     branching_vr <- unlist(str_extract_all(all_dd_chks_dt$val_txt[i], "\\w+"))
-    req_vr <- unique(c(c(kys, "base_biosex", 'visit_missed'), ## adding base_biosex to req_vr
-                       branching_vr))
+    req_vr <- unique(c(kys, branching_vr))
     if(multiselect == T){
       vr <- grep(paste0("^", all_dd_chks_rw$vr, "___"), 
                  multiselect_nm, value = T)
