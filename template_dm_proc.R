@@ -137,13 +137,29 @@ cat(glue("------------------- running expect_complete - {format(Sys.time(), '%H:
 
 # If query reports are needed across projects the code below would need to be duplicated
 
-enr_form_nm = "baseline_survey"
 
-ds_fdata_full <- ds_fdata_sg %>% 
-  left_join(formsg_list[[enr_form_nm]] %>% 
-              rename_with(\(x) paste0("enr_vis_", x),
-                          .cols=-all_of(kys)),
-            by = join_by(record_id, redcap_event_name, redcap_repeat_instrument, redcap_repeat_instance))
+add_sing_vis_branching <- function(ds, ...){
+  reduce(c(list(ds=ds), list(...)), \(x, y) {
+    vis_info <- unique(y$redcap_event_name)
+    if(length(vis_info) == 0) vis_info = "randomization_arm_1"
+    if("redcap_repeat_instrument" %!in% names(y)) y$redcap_repeat_instrument = NA
+    if(length(vis_info) > 1 | any(!is.na(y$redcap_repeat_instrument))) stop("This function can only add single visit forms. 
+                                  If you want a specific visit for a form filter prior to adding as a parameter")
+    left_join(x, y %>% 
+                select(-matches("_complete$"), -any_of("form"),
+                       -any_of(c("redcap_repeat_instrument", "redcap_repeat_instance", "redcap_event_name"))) %>% 
+                rename_with(\(x) paste0(vis_info, x),
+                            .cols=-record_id),
+              by = join_by(record_id))
+  })
+}
+
+ds_fdata_full <- dd_list_sg %>% 
+  add_sing_vis_branching(formpc_list$screening,
+                         formpc_list$consent, 
+                         formpc_list$randomization_eligibility_confirmation,
+                         formpc_list$randomization,
+                         formpc_list$participant_demographics)
 
 
 form_completeness <- dd_list_sg$dd_val %>% 

@@ -139,8 +139,8 @@ get_env_list <- function(proj_loc, dt){
   })
   
   names(out_list) <- gsub("\\.rds$|\\.qs2$", "", all_rds)
-  fds_lists_srch <- grep("_list.+_rdsfxnobjhlpr\\.", all_rds, value=T)
-  fds_lists <- paste0(unique(gsub("_list_.+", "", fds_lists_srch)), "_list")
+  fds_lists_srch <- grep("_rdsfxnobjhlpr", all_rds, value=T)
+  fds_lists <- unique(gsub("(^form.._list)_.+", "\\1", fds_lists_srch))
   if(length(fds_lists_srch) == 0){
     warning("no formds_list files were found")
     warning(glue("env_list has {length(out_list)} elements"))
@@ -150,12 +150,10 @@ get_env_list <- function(proj_loc, dt){
         local_dir <- env_loc
         
         fds_ds <- data.frame(full = list.files(local_dir, pattern = paste0(fds_list, "_.+_rdsfxnobjhlpr\\..+"))) %>% 
-          mutate(obj = gsub(".+_list_|_rdsfxnobjhlpr.+", "", full)) %>% 
+          mutate(obj = gsub("^form.._list_|_rdsfxnobjhlpr.+", "", full)) %>% 
           mutate(type = ifelse(grepl("\\.rds$", full), "rds", "qs2"))
         
         if(any(duplicated(fds_ds$full))) stop("Why are there duplicated form names in REDCap?")
-        
-        fds_nm <- gsub("_list_.+", "_list", fds_ds$full[1])
         
         fxn_block <- "
         fms <- unlist(as.list(environment()))
@@ -1529,7 +1527,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   form_list <- nlapply(dt_list_full, \(x) {
     form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi)
     form_ds <- form_ds_raw %>% 
-      mutate(cnt_nan = rowSums(!is.na(pick(-all_of(kys))))) %>% 
+      mutate(cnt_nan = rowSums(!is.na(pick(-any_of(kys))))) %>% 
       filter(cnt_nan > 0) %>% 
       select(-cnt_nan) 
     
@@ -1641,16 +1639,43 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   xml_as_list <- xml2::as_list(result_xml)
   
-  meta_list$survey_queue <- lapply(xml_as_list$ODM$Study$GlobalVariables$SurveysQueueGroup, \(x) {
-    as_tibble(attributes(x))
-  }) %>% bind_rows()
   
-  meta_list$fd_logic <- lapply(xml_as_list$ODM$Study$GlobalVariables$FormDisplayLogicConditionsGroup, \(x) {
-    as_tibble(attributes(x))
-  }) %>% 
-    bind_rows() %>% 
-    separate_longer_delim(forms_events, ",") %>% 
-    separate_wider_delim(forms_events, ":", names=c("event_name", "form_name"))
+  sq_list <- tryCatch(xml_as_list$ODM$Study$GlobalVariables$SurveysQueueGroup, error=function(e) NULL)
+  fd_list <- tryCatch(xml_as_list$ODM$Study$GlobalVariables$FormDisplayLogicConditionsGroup, error=function(e) NULL)
+  
+  meta_list$survey_queue <- if(length(sq_list) > 0){
+    lapply(sq_list, \(x) {
+      if(is.null(x)) stop("No survey queue found")
+      as_tibble(attributes(x))
+    }) %>% 
+      bind_rows()
+  } else {
+    print("No survey queue found, saving blank form")
+    data.frame(active = as.character(),
+               auto_start = as.character(),
+               condition_surveycomplete_survey_id = as.character(),
+               condition_surveycomplete_event_id = as.character(),
+               condition_andor = as.character(),
+               condition_logic = as.character(),
+               event_id = as.character(),
+               survey_id = as.character(), 
+               stringsAsFactors=FALSE) 
+  }
+  
+  meta_list$fd_logic <- if(length(fd_list) > 0){
+    lapply(fd_list, \(x) {
+      as_tibble(attributes(x))
+    }) %>% 
+      bind_rows() %>% 
+      separate_longer_delim(forms_events, ",") %>% 
+      separate_wider_delim(forms_events, ":", names=c("event_name", "form_name"))
+  } else {
+    print("No form display logic found, saving blank form")
+    data.frame(control_condition = as.character(),
+               event_name = as.character(),
+               form_name = as.character(), 
+               stringsAsFactors=FALSE) 
+  }
   
   write.csv(meta_list$survey_queue, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_surveyqueue_{today_tm}.csv"), row.names=F)
   write.csv(meta_list$fd_logic, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_formdisplaylogic_{today_tm}.csv"), row.names=F)
