@@ -155,11 +155,11 @@ add_sing_vis_branching <- function(ds, ...){
 }
 
 ds_fdata_full <- dd_list_sg %>% 
-  add_sing_vis_branching(formpc_list$screening,
-                         formpc_list$consent, 
-                         formpc_list$randomization_eligibility_confirmation,
-                         formpc_list$randomization,
-                         formpc_list$participant_demographics)
+  add_sing_vis_branching(formsg_list$screening,
+                         formsg_list$consent, 
+                         formsg_list$randomization_eligibility_confirmation,
+                         formsg_list$randomization,
+                         formsg_list$participant_demographics)
 
 
 form_completeness <- dd_list_sg$dd_val %>% 
