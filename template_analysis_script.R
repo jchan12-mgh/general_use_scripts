@@ -17,7 +17,7 @@ today_tm <- format(Sys.time(), "%Y%m%d_%H%M")
 
 name_of_report <- "rep_name"
 reports_out_fldr <- paste0("../reports/", name_of_report, "/")
-output_loc <- paste0(reports_out_fldr, today_tm, "/")
+output_loc <- glue("{reports_out_fldr}/{name_of_report}_{today_tm}/")
 dir.create(output_loc, recursive = T)
 
 if(bargs_in$add_log %in% 1){
@@ -66,6 +66,12 @@ qs_docx <- read_docx() %>%  # read_docx(path = glue("{rep_rt_user}/../../../DM/s
   body_add_flextable_font(data.frame())
 
 print(qs_docx, glue("{output_loc}/example_report_{today_tm}.docx"))
+
+
+zip::zip(zipfile = glue("{name_of_report}_{today_tm}.zip"), 
+         files = list.files(output_loc),
+         root = output_loc,
+         include_directories = TRUE)
 
 
 print(glue("Complete and saved to {output_loc}\n\n"))
