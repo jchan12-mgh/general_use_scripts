@@ -117,9 +117,6 @@ proc_src <- function(loc, two_char_desc=""){
   out_list$dd_listxx <- ddprep_fxn(out_list$ds_ddxx, repeat_instruments, cohort_nm = out_list$rc_namexx, 
                                    sq_r = out_list$ds_sq_rxx, in_em = out_list$ds_emxx)
   
-  
-  out_list$ds_fdataxx
-  
   names(out_list) <- gsub("xx", paste0("_", two_char_desc), names(out_list))
   if(two_char_desc == "") {
     names(out_list) <- gsub("zz", "ds", names(out_list))
