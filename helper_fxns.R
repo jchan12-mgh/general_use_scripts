@@ -1479,6 +1479,44 @@ get_rc_params <- function(tk, urlapi = "https://redcap.partners.org/redcap/api/"
        urlapi = urlapi)
 }
 
+get_queries <- function(tk, urlapi, pid){
+  pull_url <- dq_url(urlapi, "export", pid)
+  
+  fd_queries <- list("token"=tk,
+                     format='json',
+                     returnFormat='json'
+  ) 
+  
+  res_queries <- get_res(pull_url, body = fd_queries, encode = "form")
+  
+  res_queries_raw <- content_chr(res_queries)
+  res_queries_chr <- rawToChar(unlist(res_queries_raw))
+  res_queries_json <- fromJSON(res_queries_chr)
+  
+  bind_rows(lapply(res_queries_json, function(x){
+    # print(x$record)
+    res_ds <- bind_rows(lapply(x$resolutions, function(xx) {
+      ds <- as.data.frame(t(unlist(xx)))
+      names(ds) <- gsub("^[1-9]+.", "", names(ds))
+      ds
+    }))
+    res_loc <- as.data.frame(t(unlist(x[!names(x) == "resolutions"])))
+    if(nrow(res_ds) == 0) return(res_loc)
+    cbind(res_loc,
+          res_ds %>% select(-any_of("status_id")))
+  }))
+  
+}
+
+mk_ds_blank <- function(vct){
+  setNames(data.frame(t(vct)), vct)[0, ]
+}
+
+mk_ds_1row <- function(vct){
+  ds_out <- mk_ds_blank(vct)
+  bind_rows(ds_out, setNames(data.frame(x=NA), names(ds_out)[1]))
+}
+
 get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   ## REDCap survey queue download should be added when available
@@ -1559,46 +1597,26 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   meta_list$res_eventidmap <- content_chr(api_eventidmap)
   write.csv(meta_list$res_eventidmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventidmap_{today_tm}.csv"), row.names=F)
   
-  
-  
-  
   cat(glue("------------------- downloading queries - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   
-  pull_url <- dq_url(urlapi, "export", pid)
+  blank_cqds_vrs <- c('status_id', 'non_rule', 'project_id', 'record', 'event_id',
+                      'field_name', 'instance', 'exclude', 'query_status',
+                      'event_name', 'assigned_username', 'res_id', 'ts',
+                      'response_requested', 'comment', 'current_query_status',
+                      'field_comment_edited', 'username', 'response')
+  blank_cqds <- mk_ds_blank(blank_cqds_vrs)
   
-  fd_queries <- list("token"=tk,
-                     format='json',
-                     returnFormat='json'
-  ) 
+  cq_ds <- tryCatch(get_queries(tk, urlapi, pid), 
+                    error=function(e){
+                      print("No queries to download. Data Quality API may not be set up")
+                      blank_cqds
+                    })
   
-  res_queries <- get_res(pull_url, body = fd_queries, encode = "form")
-  
-  res_queries_raw <- content_chr(res_queries)
-  
-  if(F){
-    res_queries_chr <- rawToChar(unlist(res_queries_raw))
-    res_queries_json <- fromJSON(res_queries_chr)
-    
-    cq_ds <- bind_rows(lapply(res_queries_json, function(x){
-      # print(x$record)
-      res_ds <- bind_rows(lapply(x$resolutions, function(xx) {
-        ds <- as.data.frame(t(unlist(xx)))
-        names(ds) <- gsub("^[1-9]+.", "", names(ds))
-        ds
-      }))
-      res_loc <- as.data.frame(t(unlist(x[!names(x) == "resolutions"])))
-      if(nrow(res_ds) == 0) return(res_loc)
-      cbind(res_loc,
-            res_ds %>% select(-any_of("status_id")))
-    }))
-    
-    cq_ds %>% 
-      left_join(meta_list$res_eventidmap %>% 
-                  select(event_id, redcap_event_name = unique_event_name),
-                by = join_by(event_id)) %>% 
-      write.csv(glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_allqueries_{today_tm}.csv"), row.names=F)
-  }
-  
+  cq_ds %>% 
+    left_join(meta_list$res_eventidmap %>% 
+                select(event_id, redcap_event_name = unique_event_name),
+              by = join_by(event_id)) %>% 
+    write.csv(glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_allqueries_{today_tm}.csv"), row.names=F)
   
   cat(glue("------------------- downloading dag information - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   formData_dags <- list("token"=tk,
@@ -3428,23 +3446,35 @@ ft_indent_col <- function(fxtbl, col){
   do.call(set_formatter, c(list(fxtbl_out), fxn_list))
 }
 
-# tmp <- data.frame(txt2= c("Header line", 
-#                           "\tSub header line that is indented and should remain indented through a line break",
-#                           "\tSub header line that is indented and should remain indented through a line break",
-#                           "\t\tSub header line that is indented and should remain indented through a line break",
-#                           "\t\tSub header line that is indented and should remain indented through a line break",
-#                           "\t\t\tSub header line that is indented and should remain indented through a line break"),
-#                   x1 = "0/1 (0%)",
-#                   x2 = "0/1 (0%)",
-#                   x3 = "0/1 (0%)",
-#                   x4 = "0/1 (0%)") %>% 
-#   flextable() %>% 
-#   ft_indent_col("txt2") %>% 
-#   autofit()
-# tmp
+ft_indent_col <- function(fxtbl, col){
+  ds <- fxtbl$body$dataset
+  
+  match <- str_extract(ds[[col]], paste0("^(", "\t", ")+"))
+  
+  fxn_list <- setNames(list(function(x) gsub("\t", "", x)), col)
+  
+  fxtbl_out <- fxtbl %>% 
+    padding(j=col,
+            padding.left=replace_na(nchar(match), 0) * 20,
+            part="body")
+  
+  do.call(set_formatter, c(list(fxtbl_out), fxn_list))
+}
 
 
-
+tmp <- data.frame(txt2= c("Header line", 
+                         "\tSub header line that is indented and should remain indented through a line break",
+                         "\tSub header line that is indented and should remain indented through a line break",
+                         "\t\tSub header line that is indented and should remain indented through a line break",
+                         "\t\tSub header line that is indented and should remain indented through a line break",
+                         "\t\t\tSub header line that is indented and should remain indented through a line break"),
+                  x1 = "0/1 (0%)",
+                  x2 = "0/1 (0%)",
+                  x3 = "0/1 (0%)",
+                  x4 = "0/1 (0%)") %>% 
+  flextable() %>% 
+  indent_col("txt2") %>% 
+  autofit()
 
 
 end_fxns <- as.vector(lsf.str())

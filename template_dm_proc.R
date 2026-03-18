@@ -15,8 +15,7 @@ source(".globalvars.R")
 
 bargs_mkrenv <- getArgs(defaults = list(dt = NA, pf=NA, log=0))
 
-src_locs <- c(sg = glue("{dropbox_loc}/project_name/sig"),
-              c1 = glue("{dropbox_loc}/project_name/csrp_cons"))
+src_locs <- c(ps = glue("{dropbox_loc}/precise/ps"))
 
 today <- format(Sys.Date(), "%Y%m%d")
 
@@ -81,6 +80,7 @@ proc_src <- function(loc, two_char_desc=""){
   out_list$ds_eixx <- get_folder_fxn(out_list$dm_src_locxx, "_eventidmap_", read=T)
   out_list$ds_sqxx <- get_folder_fxn(out_list$dm_src_locxx, "_surveyqueue_", read=T)
   out_list$ds_fdxx <- get_folder_fxn(out_list$dm_src_locxx, "_formdisplaylogic_", read=T)
+  out_list$ds_qyxx <- get_folder_fxn(out_list$dm_src_locxx, "_allqueries_", read=T)
   #=========================== Global functions =================================
   all_rfiles_loc <- file.path(out_list$dm_src_locxx, "all_rfiles")
   all_rfiles <- list.files(all_rfiles_loc)
@@ -92,11 +92,12 @@ proc_src <- function(loc, two_char_desc=""){
   out_list$all_num_char_conv_issuesxx <- bind_rows(lapply(fdata_list, "[[", "nc_issues"))
   
   cat(glue("------------------- joining files - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
- 
+
+  empty_forms <- unlist(lapply(out_list$formzz_list, nrow)) == 0
+  
   out_list$ds_fdataxx <- Reduce(function(x, y) {
-    
     collapse::join(x %>% select(-any_of('form')), y %>% select(-any_of('form')), how="full", on = intersect(intersect(names(x), names(y)), kys), overid=2)
-  }, out_list$formzz_list)
+  }, c(out_list$formzz_list[!empty_forms], lapply(out_list$formzz_list[empty_forms], \(x) bind_rows(x, setNames(data.frame(NA), names(x)[1])))))
   
   out_list$ds_sq_rxx <- bind_rows(out_list$ds_sqxx %>% 
                          mutate(FD=0), 
@@ -160,29 +161,31 @@ add_sing_vis_branching <- function(ds, ...){
   })
 }
 
-ds_fdata_full <- dd_list_sg %>% 
-  add_sing_vis_branching(formsg_list$screening,
-                         formsg_list$consent, 
-                         formsg_list$randomization_eligibility_confirmation,
-                         formsg_list$randomization,
-                         formsg_list$participant_demographics)
+
+ds_fdata_full <- ds_fdata_ps %>% 
+  add_sing_vis_branching(formps_list$consent,
+                         formps_list$randomization,
+                         formps_list$randomization_eligibility_confirmation,
+                         formps_list$randomization_confirmation_call,
+                         formps_list$screening)
 
 
-form_completeness <- dd_list_sg$dd_val %>% 
+form_completeness <- dd_list_ps$dd_val %>% 
   filter(field_name %!in% c("record_id"),
          field_type %!in% c("calc"),
          !grepl("@HIDDEN|OLDCALC", field_annotation)) %>% 
   expect_complete_cfxn(ds = ds_fdata_full, cores_max = 5) %>%
   filter(variable %!in% query_optional_vrs_rc) 
 
-val_chks <- val_cfxn(dd_list_sg$dd_val, project_location_date_dt)
+val_chks <- val_cfxn(dd_list_ps$dd_val, project_location_date_dt)
 
 autodd_queries <- cq_fxn(val_chks, ds = ds_fdata_full, cores_max = 5, me=F)
 
 rm(ds_fdata_full)
 
 cat(glue("------------------- general queries complete - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
-
+queries_list <- list()
+## Queries should have columns record_id, redcap_event_name, redcap_repeat_instance (if relevant), redcap_repeat_instrument (if relevant), query_val
 
 cat(glue("------------------- saving qs2 files - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
