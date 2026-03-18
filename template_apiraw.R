@@ -23,10 +23,9 @@ source(".globalvars.R")
 # project_location is the project folder
 # all_redcaps are all of the redcaps associated with the project that should be loaded here
 
-project_location <- glue("{dropbox_loc}/project_name") # "path_to_root" # 
+project_location <- glue("{dropbox_loc}/precise") # "path_to_root" # 
 
-all_redcaps <- c("sig" = token_pid44623,
-                 "csrp_cons" = token_pid48156)
+all_redcaps <- c("ps" = token_pid59491)
 
 
 # api url should end in api/
