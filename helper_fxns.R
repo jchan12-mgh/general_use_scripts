@@ -3446,6 +3446,7 @@ ft_indent_col <- function(fxtbl, col){
   do.call(set_formatter, c(list(fxtbl_out), fxn_list))
 }
 
+<<<<<<< Updated upstream
 # tmp <- data.frame(txt2= c("Header line", 
 #                           "\tSub header line that is indented and should remain indented through a line break",
 #                           "\tSub header line that is indented and should remain indented through a line break",
@@ -3460,7 +3461,37 @@ ft_indent_col <- function(fxtbl, col){
 #   ft_indent_col("txt2") %>% 
 #   autofit()
 # tmp
+=======
+ft_indent_col <- function(fxtbl, col){
+  ds <- fxtbl$body$dataset
+  
+  match <- str_extract(ds[[col]], paste0("^(", "\t", ")+"))
+  
+  fxn_list <- setNames(list(function(x) gsub("\t", "", x)), col)
+  
+  fxtbl_out <- fxtbl %>% 
+    padding(j=col,
+            padding.left=replace_na(nchar(match), 0) * 20,
+            part="body")
+  
+  do.call(set_formatter, c(list(fxtbl_out), fxn_list))
+}
+>>>>>>> Stashed changes
 
+tmp <- data.frame(txt2= c("Header line", 
+                         "\tSub header line that is indented and should remain indented through a line break",
+                         "\tSub header line that is indented and should remain indented through a line break",
+                         "\t\tSub header line that is indented and should remain indented through a line break",
+                         "\t\tSub header line that is indented and should remain indented through a line break",
+                         "\t\t\tSub header line that is indented and should remain indented through a line break"),
+                  x1 = "0/1 (0%)",
+                  x2 = "0/1 (0%)",
+                  x3 = "0/1 (0%)",
+                  x4 = "0/1 (0%)") %>% 
+  flextable() %>% 
+  indent_col("txt2") %>% 
+  autofit()
+tmp
 
 
 
