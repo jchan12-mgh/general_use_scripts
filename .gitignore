@@ -1,7 +1,9 @@
 .Rproj.user
 .Rhistory
 .RData
+.RData*
 .Ruserdata
 *.Rproj
 .tokens.R
 .globalvars.R
+.DS_Store

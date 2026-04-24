@@ -38,10 +38,11 @@ today <- format(Sys.Date(), "%Y-%m-%d")
 main_api_out<- file.path(top_dir, "../reports/main_api_run")
 dir.create(main_api_out, recursive = T)
 
+sf <- file(glue("{main_api_out}/main_api_run_{today_tm}.log"), open = "wt")
 
 start_sink <- function(append=T) {
-  sink(glue("{main_api_out}/main_api_run_{today_tm}.log"), split=T, append=append)
-  sink(type = "message", append=append)
+  sink(sf, split=T, append=append)
+  sink(sf, type = "message", append=T)
 }
 
 start_sink(append=F)
