@@ -1705,7 +1705,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
 
 
 
-
+depdup_url <- function(x) gsub("(?<!https:)/{2,}", "/", x, perl = TRUE)
 
 gen_link <- function(rc_version, pid, redcap_repeat_instance=1, event_id, record_id, form, variable='', tk,
                      urlrc = "https://redcap.partners.org/redcap", linklbl = "REDCap Link") {
@@ -1724,7 +1724,7 @@ gen_link <- function(rc_version, pid, redcap_repeat_instance=1, event_id, record
   
   url_out <- glue("{urlrc}/{rc_version}/DataEntry/index.php?pid={pid}&instance={redcap_repeat_instance}&event_id={event_id}&id={record_id}&page={form}&fldfocus={variable}#{variable}-tr")
   urlhtml_out <- glue("<a href='{url_out}' target='_blank'>{linklbl}</a>")
-  list(link=url_out, url=urlhtml_out)
+  lapply(list(link=url_out, url=urlhtml_out), depdup_url)
 }
 
 gen_link_ds <- function(ds, tk, dd, evnt, 
@@ -1735,8 +1735,6 @@ gen_link_ds <- function(ds, tk, dd, evnt,
                         nm_vr = "field_name", 
                         nm_rec = "record_id",
                         focus=T) {
-  # evnt <- adult_env_list$ds_eventmap_id()
-  # dd <- adult_env_list$ds_dd()
   
   if(nm_instance != "redcap_repeat_instance" & "redcap_repeat_instance" %in% names(ds)) ds <- rename(ds, redcap_repeat_instance_delglds = redcap_repeat_instance)
   
@@ -1768,7 +1766,8 @@ gen_link_ds <- function(ds, tk, dd, evnt,
            field_name = !!sym(nm_vr)) %>% 
     mutate(url_chk_focus = ifelse(rep(focus, n()), glue("&fldfocus={field_name}#{field_name}-tr"), ""),
            url_out = glue("{param_list$url}/{rc_version}/DataEntry/index.php?pid={pid}&instance={redcap_repeat_instance}&event_id={event_id}&id={record_id}&page={form_name}{url_chk_focus}"),
-           urlhtml_out = glue("<a href='{url_out}' target='_blank'>REDCap Link</a>"))
+           urlhtml_out = glue("<a href='{url_out}' target='_blank'>REDCap Link</a>")) %>% 
+    mutate(across(c(url_out, urlhtml_out), depdup_url))
   
   ds %>% 
     mutate(url_out = ds_links$url_out,
