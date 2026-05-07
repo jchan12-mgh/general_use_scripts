@@ -55,12 +55,6 @@ for(proj in names(all_redcaps)){
 
 Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 20)
 
-# specified enrollment form is necessary because an initial list of all IDs to load is needed
-# see if there is a better way to do this. Just load all record_ids? Will sill need to make sure record_id is unique identifier
-# think of change for shape of data when loaded
-# api call should read in a single form and write out that single form
-
-
 for(i in 1:length(all_redcaps)){
   cat(glue("------------------- starting {names(all_redcaps)[i]} - {format(Sys.time(), '%H:%M')} ---------------- \n\n"))
   get_rc_formdata(all_redcaps[i], names(all_redcaps)[i], urlapi) 

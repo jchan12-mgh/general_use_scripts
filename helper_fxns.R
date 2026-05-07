@@ -1605,13 +1605,13 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                       'response_requested', 'comment', 'current_query_status',
                       'field_comment_edited', 'username', 'response')
   blank_cqds <- mk_ds_blank(blank_cqds_vrs)
-  
+
   cq_ds <- tryCatch(get_queries(tk, urlapi, pid), 
                     error=function(e){
                       print("No queries to download. Data Quality API may not be set up")
                       blank_cqds
                     })
-  
+  if(nrow(cq_ds) == 0) cq_ds <- blank_cqds
   cq_ds %>% 
     left_join(meta_list$res_eventidmap %>% 
                 select(event_id, redcap_event_name = unique_event_name),
@@ -1816,16 +1816,16 @@ val_cfxn <- function(ddv, today_dt) {
     mutate(
       val_txt_lo = case_when(
         text_validation_min == "today" ~ glue("FALSE"), ## ignore "today"
-        text_validation_type_or_show_slider_number == "date_mdy" & str_detect(text_validation_min, "\\[")  ~ glue("as.Date({field_name}) < as.Date({text_validation_min})") %>% convert_branching_logic(), ## if variable, remove square bracket
-        text_validation_type_or_show_slider_number == "date_mdy" ~ glue("as.Date({field_name}) < as.Date('{text_validation_min}')"), 
-        T ~ glue("as.numeric({field_name}) < as.numeric('{text_validation_min}')")
+        grepl("date", text_validation_type_or_show_slider_number) & str_detect(text_validation_min, "\\[")  ~ glue("as.Date({field_name}) < as.Date({text_validation_min})") %>% convert_branching_logic(), ## if variable, remove square bracket
+        grepl("date", text_validation_type_or_show_slider_number) ~ glue("as.Date({field_name}) < as.Date('{text_validation_min}')"), 
+        T ~ glue("as.numeric({field_name}) < as.numeric('{convert_branching_logic(text_validation_min)}')")
       ),
       val_txt_hi = case_when(
-        text_validation_max %in% c("today", "[clab_datemax]") ~ glue("as.Date({field_name}) > as.Date('{today_dt}')"), 
+        text_validation_max %in% c("today") ~ glue("as.Date({field_name}) > as.Date('{today_dt}')"), 
         text_validation_max == "now" ~ glue("ymd_hm({field_name}) > Sys.time()"), 
         text_validation_type_or_show_slider_number == "date_mdy" & str_detect(text_validation_max, "\\[")  ~ glue("as.Date({field_name}) > as.Date({text_validation_max})") %>% convert_branching_logic(), ## if variable, remove square bracket
         text_validation_type_or_show_slider_number == "date_mdy" ~ glue("as.Date({field_name}) > as.Date('{text_validation_max}')"),
-        T ~ glue("as.numeric({field_name}) > as.numeric('{text_validation_max}')")
+        T ~ glue("as.numeric({field_name}) > as.numeric('{convert_branching_logic(text_validation_min)}')")
       ),
       val_txt = case_when(
         na_or_blank(text_validation_min) ~ val_txt_hi,
@@ -1899,7 +1899,7 @@ cq_fxn <- function(exp_ds, ds = ds_fdata, cores_max = 5, me=T) {
                          select(any_of(unique(c(req_vr, vr)))) %>% 
                          mutate(qrc00_exp = !!vt_expr,
                                 qrc00_mis = !!vt_expr_vr) %>% 
-                         filter(qrc00_exp | !qrc00_mis) %>% 
+                         filter(qrc00_exp %in% T | qrc00_mis %in% F) %>% 
                          mutate(val = ifelse(rep(multiselect == T, n()), 
                                              "_multiselect_",
                                              as.character(!!sym(all_dd_chks_rw$vr)))) %>% 
@@ -2498,10 +2498,10 @@ printtab_tex <- function(tab, latex_flnm, custom.foot, merge.cols=NULL,  merge.c
              .by=all_of(c(grp_cols))) %>% 
       mutate(mc_vr_prefix = paste0("\\SetCell[r=", mmr_row_cnty,
                                    "]{", col,
-                                   "} "),
+                                   "}"),
              across(any_of(!!mc_vr), \(x) ifelse(mmr_row_cntin > 1, 
                                                  unlist(lapply(str_extract_all(x, " &"), \(xx) paste(xx, collapse=" "))), 
-                                                 paste(mc_vr_prefix, str_replace_all(x, " &", paste0(" &\\", mc_vr_prefix)))))) %>% 
+                                                 paste0(mc_vr_prefix, str_replace_all(x, " &", paste0(" &\\", mc_vr_prefix)))))) %>% 
       select(-c(mc_vr_prefix, mmr_row_cntin, mmr_row_cnty))
     
   }
@@ -2549,7 +2549,7 @@ printtab_tex <- function(tab, latex_flnm, custom.foot, merge.cols=NULL,  merge.c
   
   if(!missing(bold_row)) {
     tab_replace[bold_row, ] <- tab_replace[bold_row, ] %>% 
-      mutate(across(everything(), ~paste("\\rowstyle{\\bfseries}", gsub("&", "& \\\\rowstyle{\\\\bfseries}", .x))))
+      mutate(across(everything(), ~paste0("\\rowstyle{\\bfseries}", gsub("&", "& \\\\rowstyle{\\\\bfseries}", .x))))
   }
   
   names(tab_replace) <- colnms_tab$colnm
@@ -2561,7 +2561,7 @@ printtab_tex <- function(tab, latex_flnm, custom.foot, merge.cols=NULL,  merge.c
                           c(sapply(switch_vctr[-1*length(switch_vctr)], function(stari) ifelse(stari==0, "\\\\\\n", "\\\\*\\n")),
                             "\\n")))
   if(length(pagebreak_lines) > 0){
-    tab_in_rows[pagebreak_lines] <- paste("\\pagebreak\\n", tab_in_rows[pagebreak_lines])
+    tab_in_rows[pagebreak_lines] <- paste0("\\pagebreak\\n", tab_in_rows[pagebreak_lines])
   }
   tab_in <- paste(tab_in_rows, 
                   collapse="")
