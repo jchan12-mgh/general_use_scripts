@@ -145,15 +145,15 @@ cat(glue("------------------- running expect_complete - {format(Sys.time(), '%H:
 # If query reports are needed across projects the code below would need to be duplicated
 
 
-add_sing_vis_branching <- function(ds, ...){
+add_sing_vis_branching <- function(ds, ..., default_vis = "randomization_arm_1"){
   reduce(c(list(ds=ds), list(...)), \(x, y) {
     vis_info <- unique(y$redcap_event_name)
-    if(length(vis_info) == 0) vis_info = "randomization_arm_1"
+    if(length(vis_info) == 0) vis_info = default_vis
     if("redcap_repeat_instrument" %!in% names(y)) y$redcap_repeat_instrument = NA
     if(length(vis_info) > 1 | any(!is.na(y$redcap_repeat_instrument))) stop("This function can only add single visit forms. 
                                   If you want a specific visit for a form filter prior to adding as a parameter")
     left_join(x, y %>% 
-                select(-matches("_complete$"), -any_of("form"),
+                select(-any_of("form"),
                        -any_of(c("redcap_repeat_instrument", "redcap_repeat_instance", "redcap_event_name"))) %>% 
                 rename_with(\(x) paste0(vis_info, x),
                             .cols=-record_id),
@@ -161,13 +161,14 @@ add_sing_vis_branching <- function(ds, ...){
   })
 }
 
-
+# default_vis = ds_em_a2$unique_event_name[ds_em_a2$form == "enrollment"]
 ds_fdata_full <- ds_fdata_ps %>% 
   add_sing_vis_branching(formps_list$consent,
                          formps_list$randomization,
                          formps_list$randomization_eligibility_confirmation,
                          formps_list$randomization_confirmation_call,
-                         formps_list$screening)
+                         formps_list$screening,
+                         default_vis = ds_em_ps$unique_event_name[ds_em_ps$form == "consent"])
 
 
 form_completeness <- dd_list_ps$dd_val %>% 
