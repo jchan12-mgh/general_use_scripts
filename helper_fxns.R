@@ -1358,7 +1358,8 @@ upload_data_rc <- function(tk, data_to_upload, ov="normal",
 
 retrieve_rc_data <- function(tk, addit_vrb = as.character(), form = NA, recs, 
                              urlapi = "https://redcap.partners.org/redcap/api/", 
-                             return_fd = F) {
+                             return_fd = F,
+                             return_dag = F) {
   form_data <- list(
     "token" = tk,
     content = "record",
@@ -1370,7 +1371,8 @@ retrieve_rc_data <- function(tk, addit_vrb = as.character(), form = NA, recs,
     rawOrLabelHeaders = "raw",
     exportCheckboxLabel = "false",
     exportSurveyFields = "false",
-    exportDataAccessGroups = "false",
+    exportDataAccessGroups = tolower(as.character(return_dag)),
+    exportBlankForGrayFormStatus = 'true',
     returnFormat = "csv"
   )
   
@@ -1563,7 +1565,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   cat(glue("------------------- Downloading all forms - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   form_list <- nlapply(dt_list_full, \(x) {
-    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi)
+    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi, return_dag=T)
     form_ds <- form_ds_raw %>% 
       mutate(cnt_nan = rowSums(!is.na(pick(-any_of(kys))))) %>% 
       filter(cnt_nan > 0) %>% 
@@ -1695,8 +1697,17 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                stringsAsFactors=FALSE) 
   }
   
+  meta_list$ptdags <- httr::POST(urlapi, 
+                                 body = list("token"=tk,
+                                             content='dag',
+                                             format='csv',
+                                             returnFormat='csv'
+                                 ), encode = "form") %>% 
+    content_chr()
+  
   write.csv(meta_list$survey_queue, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_surveyqueue_{today_tm}.csv"), row.names=F)
   write.csv(meta_list$fd_logic, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_formdisplaylogic_{today_tm}.csv"), row.names=F)
+  write.csv(meta_list$ptdags, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_ptdags_{today_tm}.csv"), row.names=F)
   
   print(glue("Files saved to {loc_list[[loc_head]]$loc_base}"))
   
