@@ -1534,6 +1534,9 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   response_dd <- httr::POST(urlapi, body = formData_dd, encode = "form")
   meta_list$result_dd <- content_chr(response_dd) 
   
+  meta_list$ptdags <- retrieve_rc_data(tk, addit_vrb = "record_id", urlapi=urlapi, return_dag=T) %>% 
+    select(record_id, redcap_data_access_group) %>% 
+    distinct()
   
   checkbox_options <- meta_list$result_dd %>%
     filter(field_type == "checkbox") %>%
@@ -1697,7 +1700,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                stringsAsFactors=FALSE) 
   }
   
-  meta_list$ptdags <- httr::POST(urlapi, 
+  meta_list$daglabels <- httr::POST(urlapi, 
                                  body = list("token"=tk,
                                              content='dag',
                                              format='csv',
@@ -1707,6 +1710,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   write.csv(meta_list$survey_queue, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_surveyqueue_{today_tm}.csv"), row.names=F)
   write.csv(meta_list$fd_logic, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_formdisplaylogic_{today_tm}.csv"), row.names=F)
+  write.csv(meta_list$daglabels, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_daglabels_{today_tm}.csv"), row.names=F)
   write.csv(meta_list$ptdags, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_ptdags_{today_tm}.csv"), row.names=F)
   
   print(glue("Files saved to {loc_list[[loc_head]]$loc_base}"))
