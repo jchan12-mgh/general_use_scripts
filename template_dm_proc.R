@@ -81,22 +81,37 @@ proc_src <- function(loc, two_char_desc=""){
   out_list$ds_sqxx <- get_folder_fxn(out_list$dm_src_locxx, "_surveyqueue_", read=T)
   out_list$ds_fdxx <- get_folder_fxn(out_list$dm_src_locxx, "_formdisplaylogic_", read=T)
   out_list$ds_qyxx <- get_folder_fxn(out_list$dm_src_locxx, "_allqueries_", read=T)
+  out_list$ds_pdxx <- get_folder_fxn(out_list$dm_src_locxx, "_ptdags_", read=T)
   #=========================== Global functions =================================
   all_rfiles_loc <- file.path(out_list$dm_src_locxx, "all_rfiles")
   all_rfiles <- list.files(all_rfiles_loc)
   all_rfile_stems <- unique(sub(".*DATA_(.+)_\\d{4}-\\d{2}-\\d{2}_\\d{2}_\\d{2}\\..*", "\\1", all_rfiles))
   
+  
+  
+  out_list$primarydsxx <- out_list$ds_ddxx %>% 
+    filter(field_name == "record_id") %>% 
+    pull(form_name)
+  
   fdata_list <- nlapply(all_rfile_stems, \(x) form_read_fxn(x, all_rfiles, all_rfiles_loc, out_list$ds_ddxx))
   # formds_list functions will break if this is named anything other than formds_list
-  out_list$formzz_list <- lapply(fdata_list, "[[", "ds")
+
+  out_list$formzz_list <- nlapply(names(fdata_list), \(x) {
+    out_ds <- fdata_list[[x]]$ds
+    if(x != out_list$primarydsxx) out_ds <- out_ds %>% select(-any_of("redcap_data_access_group"))
+    out_ds
+  })
+  
   out_list$all_num_char_conv_issuesxx <- bind_rows(lapply(fdata_list, "[[", "nc_issues"))
   
   cat(glue("------------------- joining files - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
 
   empty_forms <- unlist(lapply(out_list$formzz_list, nrow)) == 0
   
+  rm_vrs <- c("form", "redcap_data_access_group")
+  
   out_list$ds_fdataxx <- Reduce(function(x, y) {
-    collapse::join(x %>% select(-any_of('form')), y %>% select(-any_of('form')), how="full", on = intersect(intersect(names(x), names(y)), kys), overid=2)
+    collapse::join(x %>% select(-any_of(rm_vrs)), y %>% select(-any_of(rm_vrs)), how="full", on = intersect(intersect(names(x), names(y)), kys), overid=2)
   }, c(out_list$formzz_list[!empty_forms], lapply(out_list$formzz_list[empty_forms], \(x) bind_rows(x, setNames(data.frame(NA), names(x)[1])))))
   
   out_list$ds_sq_rxx <- bind_rows(out_list$ds_sqxx %>% 
@@ -106,7 +121,7 @@ proc_src <- function(loc, two_char_desc=""){
                          mutate(FD = 1)) %>% 
     get_sqrlogic()
   
-  afmts_list <- fmt_gen_fxn(out_list$ds_ddxx)
+  out_list$afmts_xx <- fmt_gen_fxn(out_list$ds_ddxx)
   
   repeat_instruments <- if("redcap_repeat_instrument" %in% names(out_list$ds_fdataxx)){
     repeat_instr_fxn(out_list$ds_fdataxx)
@@ -143,6 +158,24 @@ cat(glue("------------------- running expect_complete - {format(Sys.time(), '%H:
 #' full listing of these can be seen in the dd_prep function. Required additions can be seen in the failed logic from form_completeness generation
 
 # If query reports are needed across projects the code below would need to be duplicated
+
+
+simp_core_setup <- function(proj_list, primaryds, ...){
+  del_vrs <- c("redcap_repeat_instance", "redcap_repeat_instrument", "redcap_event_name", "redcap_data_access_group", "form")
+  
+  proj_list[[primaryds]] %>% 
+    select(record_id, redcap_data_access_group) %>% 
+    distinct() %>% 
+    left_join(reduce(proj_list[c(...)], \(ds1, ds2){
+      full_join(ds1 %>% select(-any_of(del_vrs)),
+                ds2 %>% select(-any_of(del_vrs)),
+                by=join_by(record_id))
+    }),
+    by = join_by(record_id))
+}
+
+core <- simp_core_setup(formps_list, primaryds_ps, "consent", "randomization")
+
 
 
 add_sing_vis_branching <- function(ds, ..., default_vis = "randomization_arm_1"){
