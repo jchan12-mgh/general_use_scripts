@@ -81,6 +81,7 @@ proc_src <- function(loc, two_char_desc=""){
   out_list$ds_sqxx <- get_folder_fxn(out_list$dm_src_locxx, "_surveyqueue_", read=T)
   out_list$ds_fdxx <- get_folder_fxn(out_list$dm_src_locxx, "_formdisplaylogic_", read=T)
   out_list$ds_qyxx <- get_folder_fxn(out_list$dm_src_locxx, "_allqueries_", read=T)
+  out_list$ds_dlxx <- get_folder_fxn(out_list$dm_src_locxx, "_daglabels_", read=T)
   out_list$ds_pdxx <- get_folder_fxn(out_list$dm_src_locxx, "_ptdags_", read=T)
   #=========================== Global functions =================================
   all_rfiles_loc <- file.path(out_list$dm_src_locxx, "all_rfiles")
@@ -160,12 +161,12 @@ cat(glue("------------------- running expect_complete - {format(Sys.time(), '%H:
 # If query reports are needed across projects the code below would need to be duplicated
 
 
-simp_core_setup <- function(proj_list, primaryds, ...){
+simp_core_setup <- function(ds_pd, proj_list, ...){
   del_vrs <- c("redcap_repeat_instance", "redcap_repeat_instrument", "redcap_event_name", "redcap_data_access_group", "form")
   
-  proj_list[[primaryds]] %>% 
-    select(record_id, redcap_data_access_group) %>% 
+  ds_pd %>% 
     distinct() %>% 
+    mutate(across(record_id, as.character)) %>% 
     left_join(reduce(proj_list[c(...)], \(ds1, ds2){
       full_join(ds1 %>% select(-any_of(del_vrs)),
                 ds2 %>% select(-any_of(del_vrs)),
@@ -174,7 +175,7 @@ simp_core_setup <- function(proj_list, primaryds, ...){
     by = join_by(record_id))
 }
 
-core <- simp_core_setup(formps_list, primaryds_ps, "consent", "randomization")
+core <- simp_core_setup(ds_pd_ps, formps_list, "consent", "randomization")
 
 
 
