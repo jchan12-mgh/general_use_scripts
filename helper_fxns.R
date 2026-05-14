@@ -1840,7 +1840,7 @@ val_cfxn <- function(ddv, today_dt) {
         text_validation_max == "now" ~ glue("ymd_hm({field_name}) > Sys.time()"), 
         text_validation_type_or_show_slider_number == "date_mdy" & str_detect(text_validation_max, "\\[")  ~ glue("as.Date({field_name}) > as.Date({text_validation_max})") %>% convert_branching_logic(), ## if variable, remove square bracket
         text_validation_type_or_show_slider_number == "date_mdy" ~ glue("as.Date({field_name}) > as.Date('{text_validation_max}')"),
-        T ~ glue("as.numeric({field_name}) > as.numeric('{convert_branching_logic(text_validation_min)}')")
+        T ~ glue("as.numeric({field_name}) > as.numeric('{convert_branching_logic(text_validation_max)}')")
       ),
       val_txt = case_when(
         na_or_blank(text_validation_min) ~ val_txt_hi,
