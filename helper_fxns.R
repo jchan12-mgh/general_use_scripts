@@ -607,7 +607,7 @@ get_sqrlogic <- function(ds){
     mutate(clogic_r = glue("(({convert_branching_logic(clogic)}) & {all_vis})")) %>% 
     summarise(clogic_r = paste0(clogic_r, collapse=" | "),
               .by=c(form_name, FD)) %>% 
-    summarise(clogic_r = paste0(clogic_r, collapse=" | "),
+    summarise(clogic_r = paste0(clogic_r, collapse=" & "),
               .by=form_name)
   
 } 
