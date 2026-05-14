@@ -1568,7 +1568,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   cat(glue("------------------- Downloading all forms - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   form_list <- nlapply(dt_list_full, \(x) {
-    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi, return_dag=T)
+    form_ds_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", form = x, urlapi=urlapi, return_dag=F)
     form_ds <- form_ds_raw %>% 
       mutate(cnt_nan = rowSums(!is.na(pick(-any_of(kys))))) %>% 
       filter(cnt_nan > 0) %>% 
