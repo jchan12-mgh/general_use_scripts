@@ -1769,7 +1769,11 @@ gen_link_ds <- function(ds, tk, dd, evnt,
                 by=join_by(!!sym(nm_vr)  == field_name))
   }
   
-  param_list <- get_rc_params(tk)
+  if(class(tk) == "list") {
+    param_list <- tk
+  } else {
+    param_list <- get_rc_params(tk)
+  }
   rc_version = param_list$rc_version
   pid= param_list$pid
   
