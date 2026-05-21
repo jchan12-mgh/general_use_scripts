@@ -221,6 +221,32 @@ na_or_blank <- function(x) {
   is.na(x) | x == ""
 }
 
+
+# returns a factorized version of a ms variable, using the ds_dd to get the appropriate ms options
+which_ms <- function(ds, ms_vrb_name, new_column_name, afmt_list, labs_rm = NA, mult_txt = "Multiple"){
+  # get all the multiselect col names in core for this ms vrb
+  
+  fmt_ds <- attr(afmt_list[[ms_vrb_name]], "tribble") %>% 
+    add_row(levs = "8888", labs = mult_txt) %>% 
+    mutate(across(levs, ~ gsub(",", "", .x)),
+           across(labs, ~ gsub("^'|'$", "", .x)), 
+           across(labs, ~ gsub("\\s*\\{[^\\)]+\\}", "", .x)),
+           vrnm = paste0(ms_vrb_name, "___", gsub("-", "_", levs))) %>% 
+    filter(!labs %in% labs_rm)
+  ms_nms_named = setNames(fmt_ds$labs, fmt_ds$vrnm)
+  
+  which1 <- function(x){
+    if(!any(x %in% 1)) return(NA)
+    all_matches <- as.numeric(which(x==1))
+    if(length(all_matches) > 1) return(fmt_ds$labs[nrow(fmt_ds)])
+    fmt_ds$labs[all_matches]
+  }
+  ds[[new_column_name]] <-  factor(apply(ds[fmt_ds$vrnm[-nrow(fmt_ds)]], 1, which1), 
+                                   levels=fmt_ds$labs)
+  
+  ds
+}
+
 # automatically apply afmt to a variable by it's name
 
 fize <- function(ds, afmts, fcols){
@@ -2341,7 +2367,17 @@ summ_df <-  function(ds, vrs, grp=as.character(), vrnm = "Characteristic", overa
 
 summ_tab <- function(ds, vrs, grp=as.character(), vrnm = "Characteristic", overall=T, headn=F, 
                      digits=0, denom=F, test_loc, rm_levs= as.character(c()),
-                     outlist=F, cts_summ = "mean", cat_fxn){
+                     outlist=F, cts_summ = "mean", cat_fxn, vrl_in){
+  if(missing(vrl_in)){
+    if(exists('vr_labels')){
+      vrl_in = vr_labels
+    } else {
+      vrl_in = data.frame(vr=as.character(), vrlabel=as.character())
+      print(glue("Using a blank vrl_in. If you want to insert variable labels create the dataset below and add as parameter vrl_in. \n",
+                 "tribble(~vr, ~vrlabel, \n",
+                 "{paste0('\"', vrs, '\",\"', vrs, '\",\n', collapse='')})"))
+    }
+  }
   
   if(nrow(ds)==0) {
     if(outlist) { 
