@@ -2235,7 +2235,7 @@ ds_to_table <- function(data, colmat, output.cols=NULL, expand=FALSE, grp.var=NU
 #add_labels function from vr_labels adapted to remove [no label]
 add_labels2 <- function(ds, vr_colnm = "vr") {
   ds %>% 
-    left_join(vr_labels, by=vr_colnm) %>% 
+    left_join(vrl_in, by=vr_colnm) %>% 
     mutate(across(vrlabel, ~ ifelse(is.na(vrlabel), vr, vrlabel)))
 }
 
@@ -2870,7 +2870,7 @@ demo_fxn <- function(tab, grp=as.character(), headn=T, denom=T, overall=T,
   }
   for(grp_vrs_nm in get_notblank(names(vrs_list))){
     grp_vrs <- vrs_list[[grp_vrs_nm]]
-    grp_vrs_labs <- setNames(vr_labels$vrlabel, vr_labels$vr)[grp_vrs]
+    grp_vrs_labs <- setNames(vrl_in$vrlabel, vrl_in$vr)[grp_vrs]
     grp_vrs_labs[is.na(grp_vrs_labs)] <- grp_vrs[is.na(grp_vrs_labs)]
     res <- res %>% 
       filter(!(Characteristic %in% grp_vrs_labs & Level == "XXXNOTXXX"))
