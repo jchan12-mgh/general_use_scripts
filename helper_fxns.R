@@ -1839,7 +1839,7 @@ val_cfxn <- function(ddv, today_dt) {
         text_validation_min == "today" ~ glue("FALSE"), ## ignore "today"
         grepl("date", text_validation_type_or_show_slider_number) & str_detect(text_validation_min, "\\[")  ~ glue("as.Date({field_name}) < as.Date({min_conv})"), ## if variable, remove square bracket
         grepl("date", text_validation_type_or_show_slider_number) ~ glue("as.Date({field_name}) < as.Date('{min_conv}')"), 
-        str_detect(text_validation_min, "\\[") ~ glue("as.numeric({vr.name}) < as.numeric({min_conv})"),
+        str_detect(text_validation_min, "\\[") ~ glue("as.numeric({field_name}) < as.numeric({min_conv})"),
         T ~ glue("as.numeric({field_name}) < as.numeric('{min_conv}')")
       ),
       val_txt_hi = case_when(
@@ -1847,7 +1847,7 @@ val_cfxn <- function(ddv, today_dt) {
         text_validation_max == "now" ~ glue("ymd_hm({field_name}) > Sys.time()"), 
         text_validation_type_or_show_slider_number == "date_mdy" & str_detect(text_validation_max, "\\[")  ~ glue("as.Date({field_name}) > as.Date({max_conv})"), ## if variable, remove square bracket
         text_validation_type_or_show_slider_number == "date_mdy" ~ glue("as.Date({field_name}) > as.Date('{max_conv}')") ,
-        str_detect(text_validation_max, "\\[") ~ glue("as.numeric({vr.name}) > as.numeric({max_conv})"),
+        str_detect(text_validation_max, "\\[") ~ glue("as.numeric({field_name}) > as.numeric({max_conv})"),
         T ~ glue("as.numeric({field_name}) > as.numeric('{max_conv}')")
       ),
       val_txt = case_when(
