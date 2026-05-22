@@ -2233,7 +2233,7 @@ ds_to_table <- function(data, colmat, output.cols=NULL, expand=FALSE, grp.var=NU
 }
 
 #add_labels function from vr_labels adapted to remove [no label]
-add_labels2 <- function(ds, vr_colnm = "vr") {
+add_labels2 <- function(ds, vr_colnm = "vr", vrl_in) {
   ds %>% 
     left_join(vrl_in, by=vr_colnm) %>% 
     mutate(across(vrlabel, ~ ifelse(is.na(vrlabel), vr, vrlabel)))
@@ -2406,7 +2406,7 @@ summ_tab <- function(ds, vrs, grp=as.character(), vrnm = "Characteristic", overa
     mutate(across(vr, \(x) factor(x, levels=vrs)),
            across(level, factor)) %>% 
     arrange(vr, !!!syms(grp)) %>% 
-    add_labels2() 
+    add_labels2(vrl_in=vrl_in) 
   
   ds_out <- ds_out_raw %>%
     select(-any_of(c("num_val", "vr"))) %>% 
