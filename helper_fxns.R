@@ -2406,7 +2406,7 @@ summ_tab <- function(ds, vrs, grp=as.character(), vrnm = "Characteristic", overa
     mutate(across(vr, \(x) factor(x, levels=vrs)),
            across(level, factor)) %>% 
     arrange(vr, !!!syms(grp)) %>% 
-    add_labels2(vrl_in) 
+    add_labels2(vrl_in=vrl_in) 
   
   ds_out <- ds_out_raw %>%
     select(-any_of(c("num_val", "vr"))) %>% 
