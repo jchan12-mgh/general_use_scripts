@@ -417,7 +417,7 @@ conv_prop_type <- function(cur_vrb_col, vrb_name, dd=ds_dd, verbose = F) {
     dt_out <- coalesce(ymd(cur_vrb_col, quiet=T), mdy(cur_vrb_col, quiet=T), ymd(gsub(" .+", "", cur_vrb_col)))
     if(sum(is.na(dt_in)) != sum(is.na(dt_out))) {
       warning(glue("CHECK WARNING: Some dates in {vrb_name} failed to convert to dates"))
-      return(dt_in)
+      return(dt_out) # this could return dt_in if you wanted to be more stringent
     } else {
       return(dt_out)
     }
