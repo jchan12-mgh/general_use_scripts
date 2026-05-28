@@ -413,7 +413,14 @@ conv_prop_type <- function(cur_vrb_col, vrb_name, dd=ds_dd, verbose = F) {
   } else if ("date_mdy" %in% vrb_info$text_validation_type_or_show_slider_number) {
     # date-oriented variable
     if (verbose) print(paste(vrb_name, "->", "date"))
-    return(coalesce(ymd(cur_vrb_col, quiet=T), mdy(cur_vrb_col, quiet=T)))
+    dt_in <- cur_vrb_col
+    dt_out <- coalesce(ymd(cur_vrb_col, quiet=T), mdy(cur_vrb_col, quiet=T), ymd(gsub(" .+", "", cur_vrb_col)))
+    if(sum(is.na(dt_in)) != sum(is.na(dt_out))) {
+      warning(glue("CHECK WARNING: Some dates in {vrb_name} failed to convert to dates"))
+      return(dt_out) # this could return dt_in if you wanted to be more stringent
+    } else {
+      return(dt_out)
+    }
   } else if ("dropdown" %in% vrb_info$field_type) {
     # if the 'dropdown' type variable has numeric values, convert (otherwise leave as be)
     if (any(!(cur_vrb_col %in% as.numeric(cur_vrb_col)))) {
