@@ -336,7 +336,14 @@ tab_factor <- function (x, chr, na_cond) {
 
 # read in data from httr api call without applying types automatically
 
-content_chr <- function(x)  content(x, col_types = cols(.default = "c"))
+content_chr <- function(x) {
+  as_forcontent <- if(http_type(x) == "text/csv") {
+    "parsed"
+  } else {
+    "text"
+  }
+  content(x, col_types = cols(.default = "c"), as=as_forcontent)
+} 
 
 # reduce levels in a factor to only those that exist in data
 
@@ -1227,8 +1234,7 @@ push_query <- function(urlapi, token, pid, evnt_nm, evnt_id,
     )
   }
   
-  result <- content(response)
-  rawToChar(result)
+  content_chr(response)
 }
 
 
@@ -1267,9 +1273,7 @@ pull_queries <- function(urlapi, token, verbose=F, records){
     )
   }
   
-  result <- content(response)
-  
-  jsonlite::prettify(rawToChar(result))
+  jsonlite::prettify(content_chr(response))
 }
 
 push_query_coh <- function(queries_ds_in, tk, pid, rt_url, status= "OPEN", ds_dd, incl_dup = F, use_id = F){
@@ -1347,7 +1351,7 @@ upload_data_rc <- function(tk, data_to_upload, ov="normal",
       returnFormat = "json"
     )
     response <- POST(urlapi, body = formData, encode = "form")
-    result <- content(response)
+    result <- content_chr(response)
     return(result)
   } else {
     if(nrow(data_to_upload) == 0) {
@@ -1372,7 +1376,7 @@ upload_data_rc <- function(tk, data_to_upload, ov="normal",
         returnFormat = "json"
       )
       response <- POST(urlapi, body = formData, encode = "form")
-      result_list[[i]] <- content(response)
+      result_list[[i]] <- content_chr(response)
       if(is.na(as.numeric(result_list[[i]]))) stop(paste("Error in push: ", result_list[[i]]))
     }
     return(sum(unlist(result_list)))
@@ -1498,13 +1502,13 @@ get_rc_params <- function(tk, urlapi = "https://redcap.partners.org/redcap/api/"
   
   pi_response <- httr::POST(urlapi, body = pi_formData, encode = "form")
   
-  pi_res <- httr::content(pi_response)
+  pi_res <- content_chr(pi_response)
   
   rv_formData <- list("token"=tk,
                       content='version')
   
   rv_response <- httr::POST(urlapi, body = rv_formData, encode = "form")
-  rv_res <- httr::content(rv_response)
+  rv_res <- content_chr(rv_response)
   
   rc_version <- paste0("redcap_v", names(rv_res))
   pid <- pi_res$project_id
@@ -1524,9 +1528,7 @@ get_queries <- function(tk, urlapi, pid){
   
   res_queries <- get_res(pull_url, body = fd_queries, encode = "form")
   
-  res_queries_raw <- content_chr(res_queries)
-  res_queries_chr <- rawToChar(unlist(res_queries_raw))
-  res_queries_json <- fromJSON(res_queries_chr)
+  res_queries_json <- fromJSON(content_chr(res_queries))
   
   bind_rows(lapply(res_queries_json, function(x){
     # print(x$record)
@@ -1691,7 +1693,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                        returnFormat = "xml")
   
   response_xml <- httr::POST(urlapi, body = formData_xml, encode="form")
-  result_xml <- content(response_xml)
+  result_xml <- content(response_xml, as="parsed")
   
   xml_as_list <- xml2::as_list(result_xml)
   
