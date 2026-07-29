@@ -247,6 +247,7 @@ which_ms <- function(ds, ms_vrb_name, new_column_name, afmt_list, labs_rm = NA, 
   ds
 }
 
+
 # automatically apply afmt to a variable by it's name
 
 fize <- function(ds, afmts, fcols){
@@ -2860,7 +2861,8 @@ printtab <- function(tab, col.names=colnames(tab), merge.cols=NULL, merge.cols.g
 #----------------------------------DEMO FUNCTION---------------------------------------
 
 demo_fxn <- function(tab, grp=as.character(), headn=T, denom=T, overall=T, 
-                     vrs, vrs_list, incl_missing=T, outlist=F, rm_levs = as.character(c()), cts_summ = "mean") {
+                     vrs, vrs_list, incl_missing=T, outlist=F, rm_levs = as.character(c()), 
+                     cts_summ = "mean", vrl_in) {
   
   if(!missing(vrs)){
     st_vrs <- unlist(lapply(vrs, function(vr) {
@@ -2870,8 +2872,18 @@ demo_fxn <- function(tab, grp=as.character(), headn=T, denom=T, overall=T,
   } else {
     st_vrs <- unname(unlist(vrs_list))
   }
+  if(missing(vrl_in)){
+    if(exists('vr_labels')){
+      vrl_in = vr_labels
+    } else {
+      vrl_in = data.frame(vr=as.character(), vrlabel=as.character())
+      print(glue("Using a blank vrl_in. If you want to insert variable labels create the dataset below and add as parameter vrl_in. \n",
+                 "tribble(~vr, ~vrlabel, \n",
+                 "{paste0('\"', st_vrs, '\",\"', st_vrs, '\",\n', collapse='')})"))
+    }
+  }
   
-  res_obj <- summ_tab(tab, st_vrs, grp=grp, headn=headn, denom=denom, overall=overall, outlist=outlist, rm_levs=rm_levs, cts_summ=cts_summ) 
+  res_obj <- summ_tab(tab, st_vrs, grp=grp, headn=headn, denom=denom, overall=overall, outlist=outlist, rm_levs=rm_levs, cts_summ=cts_summ, vrl_in=vrl_in) 
   
   get_notblank <- function(x) {
     x[!x==""]
