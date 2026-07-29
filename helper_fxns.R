@@ -2781,6 +2781,10 @@ printtab <- function(tab, col.names=colnames(tab), merge.cols=NULL, merge.cols.g
     flextable() %>%
     autofit() %>%
     bold(part='header')
+  if(!missing(bold_row)){
+    prtab <- prtab %>%
+      bold(i = bold_row)
+  }
   if (zebra) {
     prtab <- prtab %>%
       theme_zebra(even_header = color, even_body = color, 
@@ -3504,10 +3508,10 @@ ft_indent_col <- function(fxtbl, col){
   match <- str_extract(ds[[col]], paste0("^(", "\t", ")+"))
   
   fxn_list <- setNames(list(function(x) gsub("\t", "", x)), col)
-  
+
   fxtbl_out <- fxtbl %>% 
     padding(j=col,
-            padding.left=replace_na(nchar(match), 0) * 20,
+            padding.left=replace_na(as.numeric(nchar(match)), 0.25) * 20,
             part="body")
   
   do.call(set_formatter, c(list(fxtbl_out), fxn_list))
