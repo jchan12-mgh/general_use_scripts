@@ -1227,7 +1227,7 @@ push_query <- function(urlapi, token, pid, evnt_nm, evnt_id,
     )
   }
   
-  result <- content(response)
+  result <- content(response, as="text")
   rawToChar(result)
 }
 
