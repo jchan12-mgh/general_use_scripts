@@ -1569,10 +1569,16 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   )
   response_dd <- httr::POST(urlapi, body = formData_dd, encode = "form")
   meta_list$result_dd <- content_chr(response_dd) 
-  
-  meta_list$ptdags <- retrieve_rc_data(tk, addit_vrb = "record_id", urlapi=urlapi, return_dag=T) %>% 
-    select(record_id, redcap_data_access_group) %>% 
-    distinct()
+
+  ptdags_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", urlapi=urlapi, return_dag=T)
+  if(nrow(ptdags_raw) > 0) {
+    meta_list$ptdags <- ptdags_raw %>% 
+      select(record_id, redcap_data_access_group) %>% 
+      distinct()
+  } else {
+    meta_list$ptdags <- ptdags_raw
+  }
+
   
   checkbox_options <- meta_list$result_dd %>%
     filter(field_type == "checkbox") %>%
