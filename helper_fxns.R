@@ -11,6 +11,7 @@ if(length(system("git rev-parse --show-toplevel", intern = T, ignore.stderr = T)
   if(getwd() != system("git rev-parse --show-toplevel", intern = T, ignore.stderr = T)) print("To run this script properly you need to be at the top level of the repo")
 }
 
+get_abs_loc <- function(loc) system(paste0("cd ", loc, ";pwd"), intern=T)
 
 curr_fxns <- as.vector(lsf.str())
 
