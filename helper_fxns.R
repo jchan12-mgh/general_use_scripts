@@ -1605,7 +1605,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   
   write.csv(meta_list$result_dd, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_DataDictionary_{today_tm}.csv"), row.names=F)
   dt_list_full <- unique(dd_form_vrs$form_name)
-  
+
   
   cat(glue("------------------- data dictionary out - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   
@@ -1633,6 +1633,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                             format='csv',
                             returnFormat='csv')
   api_eventmap <- httr::POST(urlapi, body = formData_eventmap, encode = "form")
+  
   meta_list$res_eventmap <- content_chr(api_eventmap)
   write.csv(meta_list$res_eventmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventmap_{today_tm}.csv"), row.names=F)
   
@@ -1645,25 +1646,35 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   meta_list$res_eventidmap <- content_chr(api_eventidmap)
   write.csv(meta_list$res_eventidmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventidmap_{today_tm}.csv"), row.names=F)
   
-  cat(glue("------------------- downloading queries - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
   
+  
+  cat(glue("------------------- downloading queries - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
+
   blank_cqds_vrs <- c('status_id', 'non_rule', 'project_id', 'record', 'event_id',
                       'field_name', 'instance', 'exclude', 'query_status',
-                      'event_name', 'assigned_username', 'res_id', 'ts',
+                      'event_name', 'redcap_event_name', 'assigned_username', 'res_id', 'ts',
                       'response_requested', 'comment', 'current_query_status',
                       'field_comment_edited', 'username', 'response')
   blank_cqds <- mk_ds_blank(blank_cqds_vrs)
-
-  cq_ds <- tryCatch(get_queries(tk, urlapi, pid), 
-                    error=function(e){
-                      print("No queries to download. Data Quality API may not be set up")
-                      blank_cqds
-                    })
-  if(nrow(cq_ds) == 0) cq_ds <- blank_cqds
+  
+  cq_ds <- tryCatch({
+    ds_out <- get_queries(tk, urlapi, pid)
+    stopifnot(nrow(ds_out) > 0)
+    if(nrow(meta_list$res_eventidmap) > 0){
+      ds_out %>% 
+        left_join(meta_list$res_eventidmap %>% 
+                    select(event_id, redcap_event_name = unique_event_name),
+                  by = join_by(event_id))
+    } else {
+      ds_out
+    }
+  }, 
+  error=function(e){
+    print("No queries to download. Data Quality API may not be set up or no queries pushed in yet")
+    blank_cqds
+  })
+  
   cq_ds %>% 
-    left_join(meta_list$res_eventidmap %>% 
-                select(event_id, redcap_event_name = unique_event_name),
-              by = join_by(event_id)) %>% 
     write.csv(glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_allqueries_{today_tm}.csv"), row.names=F)
   
   cat(glue("------------------- downloading dag information - {format(Sys.time(), '%H:%M')} ------------------- \n\n"))
