@@ -1658,10 +1658,16 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   blank_cqds <- mk_ds_blank(blank_cqds_vrs)
   
   cq_ds <- tryCatch({
-    get_queries(tk, urlapi, pid) %>% 
-      left_join(meta_list$res_eventidmap %>% 
-                  select(event_id, redcap_event_name = unique_event_name),
-                by = join_by(event_id))
+    ds_out <- get_queries(tk, urlapi, pid)
+    stopifnot(nrow(ds_out) > 0)
+    if(nrow(meta_list$res_eventidmap) > 0){
+      ds_out %>% 
+        left_join(meta_list$res_eventidmap %>% 
+                    select(event_id, redcap_event_name = unique_event_name),
+                  by = join_by(event_id))
+    } else {
+      ds_out
+    }
   }, 
   error=function(e){
     print("No queries to download. Data Quality API may not be set up or no queries pushed in yet")
