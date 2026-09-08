@@ -1632,10 +1632,7 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                             format='csv',
                             returnFormat='csv')
   api_eventmap <- httr::POST(urlapi, body = formData_eventmap, encode = "form")
-<<<<<<< Updated upstream
-  
-  meta_list$res_eventmap <- content_chr(api_eventmap)
-=======
+
   if(api_eventmap$status_code != 200) {
     meta_list$res_eventmap <- data.frame(arm_num="",
                                          unique_event_name='',
@@ -1644,7 +1641,6 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
     meta_list$res_eventmap <- content_chr(api_eventmap)
   }
   
->>>>>>> Stashed changes
   write.csv(meta_list$res_eventmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventmap_{today_tm}.csv"), row.names=F)
   
   
