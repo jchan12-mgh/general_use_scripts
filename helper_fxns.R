@@ -1557,7 +1557,6 @@ mk_ds_1row <- function(vct){
 }
 
 get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
-  
   ## REDCap survey queue download should be added when available
   
   meta_list <- list()
@@ -1572,12 +1571,12 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
   meta_list$result_dd <- content_chr(response_dd) 
 
   ptdags_raw <- retrieve_rc_data(tk, addit_vrb = "record_id", urlapi=urlapi, return_dag=T)
-  if(nrow(ptdags_raw) > 0) {
+  if(nrow(ptdags_raw) == 0 | "redcap_data_access_group" %!in% names(ptdags_raw)) {
+    meta_list$ptdags <- data.frame(record_id = "", redcap_data_access_group = "")[0, ]
+  } else {
     meta_list$ptdags <- ptdags_raw %>% 
       select(record_id, redcap_data_access_group) %>% 
       distinct()
-  } else {
-    meta_list$ptdags <- ptdags_raw
   }
 
   
@@ -1633,8 +1632,15 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                             format='csv',
                             returnFormat='csv')
   api_eventmap <- httr::POST(urlapi, body = formData_eventmap, encode = "form")
+
+  if(api_eventmap$status_code != 200) {
+    meta_list$res_eventmap <- data.frame(arm_num="",
+                                         unique_event_name='',
+                                         form='')[0, ]
+  } else {
+    meta_list$res_eventmap <- content_chr(api_eventmap)
+  }
   
-  meta_list$res_eventmap <- content_chr(api_eventmap)
   write.csv(meta_list$res_eventmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventmap_{today_tm}.csv"), row.names=F)
   
   
@@ -1643,7 +1649,16 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                               format='csv',
                               returnFormat='csv')
   api_eventidmap <- httr::POST(urlapi, body = formData_eventidmap, encode = "form")
-  meta_list$res_eventidmap <- content_chr(api_eventidmap)
+  if(api_eventidmap$status_code != 200) {
+    meta_list$res_eventidmap <- data.frame(event_name="",
+                                           arm_num="",
+                                           unique_event_name='',
+                                           custom_event_label='',
+                                           event_id='')[0, ]
+  } else {
+    meta_list$res_eventidmap <- content_chr(api_eventidmap)
+  }
+  
   write.csv(meta_list$res_eventidmap, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_eventidmap_{today_tm}.csv"), row.names=F)
   
   
@@ -1702,7 +1717,15 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                                format='csv',
                                returnFormat='csv')
   api_repeatforms <- httr::POST(urlapi, body = formData_repeatforms, encode = "form")
-  meta_list$res_repeatforms <- content_chr(api_repeatforms)
+  
+  if(api_repeatforms$status_code != 200) {
+    meta_list$res_repeatforms <- data.frame(event_name="",
+                                            form_name="",
+                                            custom_form_label='')[0, ]
+  } else {
+    meta_list$res_repeatforms <- content_chr(api_repeatforms)
+  }
+  
   write.csv(meta_list$res_repeatforms, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_repeatforms_{today_tm}.csv"), row.names=F)
   
   formData_xml <- list("token"=tk,
@@ -1758,8 +1781,8 @@ get_rc_formdata <- function(tk, loc_head, urlapi, ret=F){
                                  body = list("token"=tk,
                                              content='dag',
                                              format='csv',
-                                             returnFormat='csv'
-                                 ), encode = "form") %>% 
+                                             returnFormat='csv'), 
+                                 encode = "form") %>% 
     content_chr()
   
   write.csv(meta_list$survey_queue, glue("{loc_list[[loc_head]]$loc_base}/{fl_prefix}_surveyqueue_{today_tm}.csv"), row.names=F)
