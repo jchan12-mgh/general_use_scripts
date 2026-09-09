@@ -1398,7 +1398,8 @@ upload_data_rc <- function(tk, data_to_upload, ov="normal",
 retrieve_rc_data <- function(tk, addit_vrb = as.character(), form = NA, recs, 
                              urlapi = "https://redcap.partners.org/redcap/api/", 
                              return_fd = F,
-                             return_dag = F) {
+                             return_dag = F, 
+                             sf = "false") {
   form_data <- list(
     "token" = tk,
     content = "record",
@@ -1409,7 +1410,7 @@ retrieve_rc_data <- function(tk, addit_vrb = as.character(), form = NA, recs,
     rawOrLabel = "raw",
     rawOrLabelHeaders = "raw",
     exportCheckboxLabel = "false",
-    exportSurveyFields = "false",
+    exportSurveyFields = sf,
     exportDataAccessGroups = tolower(as.character(return_dag)),
     exportBlankForGrayFormStatus = 'true',
     returnFormat = "csv"
