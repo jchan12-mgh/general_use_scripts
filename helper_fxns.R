@@ -43,7 +43,7 @@ load_libs <- function(add_libs , install_pcks=T){
     sapply(new_pcks, function(x) {
       loaded = suppressWarnings(do.call("require", list(x)))
       if(!loaded){
-        install.packages(x, repos = 'http://cran.us.r-project.org')
+        install.packages(x, repos = 'https://cloud.r-project.org')
         loaded = suppressWarnings(do.call("require", list(x)))
         if(loaded) {
           print(paste(x, " installed and loaded"))
