@@ -120,9 +120,11 @@ qs_read1 <- function(ds, ...){
 }
 
 ## loads saved processed files references into a named list of functions that will load data when called
-
-get_env_list <- function(proj_loc, dt){
-  proj_dm_loc <- file.path(proj_loc, "DM")
+# path_nodm = T if proj_loc specifies the entire filepath and does not end with a DM folder
+           
+get_env_list <- function(proj_loc, dt, path_nodm = F){
+  if(path_nodm == T) proj_dm_loc <- file.path(proj_loc)
+  else proj_dm_loc <- file.path(proj_loc, "DM")
   
   if(missing(dt)) dt <- suppressWarnings(max(as.numeric(list.files(proj_dm_loc)), na.rm=T))
   print(glue("loading data from {dt}"))
