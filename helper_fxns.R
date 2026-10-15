@@ -344,7 +344,7 @@ content_chr <- function(x) {
   } else {
     "text"
   }
-  content(x, col_types = cols(.default = "c"), as=as_forcontent)
+  content(x, col_types = cols(.default = "c"), na = c(""), as=as_forcontent)
 } 
 
 # reduce levels in a factor to only those that exist in data
